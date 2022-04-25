@@ -15,8 +15,9 @@
 package cmd
 
 import (
-	"fmt"
+	"os"
 
+	"github.com/jedib0t/go-pretty/table"
 	"github.com/penny-vault/import-polygon-tickers/polygon"
 	"github.com/spf13/cobra"
 )
@@ -30,8 +31,15 @@ var assetTypesCmd = &cobra.Command{
 	Short: "List supported asset types",
 	Run: func(cmd *cobra.Command, args []string) {
 		supportedAssets := polygon.ListSupportedAssetTypes()
+
+		t := table.NewWriter()
+		t.SetOutputMirror(os.Stdout)
+		t.AppendHeader(table.Row{"Asset Code", "Description"})
 		for _, assetType := range supportedAssets {
-			fmt.Printf("%s\t%s\n", assetType.Code, assetType.Description)
+			t.AppendRow(table.Row{
+				assetType.Code, assetType.Description,
+			})
 		}
+		t.Render()
 	},
 }

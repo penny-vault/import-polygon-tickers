@@ -15,9 +15,11 @@
 package cmd
 
 import (
-	"fmt"
+	"os"
+	"sort"
 	"strings"
 
+	"github.com/jedib0t/go-pretty/table"
 	"github.com/penny-vault/import-polygon-tickers/polygon"
 	"github.com/spf13/cobra"
 )
@@ -33,10 +35,22 @@ var exchangeCodesCmd = &cobra.Command{
 https://www.iso20022.org/market-identifier-codes`,
 	Run: func(cmd *cobra.Command, args []string) {
 		exchangeCodes := polygon.ListExchangeCodes()
+
+		sort.Slice(exchangeCodes, func(i, j int) bool {
+			return exchangeCodes[i].Mic < exchangeCodes[j].Mic
+		})
+
+		// print to screen
+		t := table.NewWriter()
+		t.SetOutputMirror(os.Stdout)
+		t.AppendHeader(table.Row{"Exchange Code", "Name", "Website"})
 		for _, code := range exchangeCodes {
 			if code.ISOCountryCode == "US" && code.Status == "ACTIVE" {
-				fmt.Printf("%s\t%s\t\t%s\n", code.Mic, code.Name, strings.ToLower(code.Website))
+				t.AppendRow(table.Row{
+					code.Mic, code.Name, strings.ToLower(code.Website),
+				})
 			}
 		}
+		t.Render()
 	},
 }
