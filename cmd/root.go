@@ -27,8 +27,6 @@ import (
 )
 
 var cfgFile string
-var listAssetTypes bool
-var listExchangeCodes bool
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -42,14 +40,6 @@ var rootCmd = &cobra.Command{
 			Strs("Exchanges", viper.GetStringSlice("exchanges")).
 			Strs("AssetTypes", viper.GetStringSlice("asset_types")).
 			Msg("loading tickers")
-
-		if listAssetTypes {
-			log.Info().Msg("list asset types")
-		}
-
-		if listExchangeCodes {
-			log.Info().Msg("list exchange codes")
-		}
 
 		/*
 			assets := polygon.FetchTickers()
@@ -105,15 +95,11 @@ func init() {
 	rootCmd.Flags().Uint32P("limit", "l", 0, "limit results to N")
 	viper.BindPFlag("limit", rootCmd.Flags().Lookup("limit"))
 
-	rootCmd.Flags().StringArray("asset-types", []string{}, "types of assets to download - defaults to all. Run --list-asset-types to see options")
+	rootCmd.Flags().StringArray("asset-types", []string{"CS", "PFD", "ETF", "FUND"}, "types of assets to download - defaults to all. Run list-asset-types to see options")
 	viper.BindPFlag("asset_types", rootCmd.Flags().Lookup("asset-types"))
 
-	rootCmd.Flags().BoolVar(&listAssetTypes, "list-asset-types", true, "list supported exchange codes")
-
-	rootCmd.Flags().StringArray("exchanges", []string{}, "list of ISO code exchanges to download from -- do --list-exchange-codes for all possible options")
+	rootCmd.Flags().StringArray("exchanges", []string{}, "list of ISO code exchanges to download from -- do list-exchange-codes for all possible options")
 	viper.BindPFlag("exchanges", rootCmd.Flags().Lookup("exchanges"))
-
-	rootCmd.Flags().BoolVar(&listExchangeCodes, "list-exchange-codes", true, "list supported exchange codes")
 
 	rootCmd.Flags().Duration("max-age", 24*7*time.Hour, "maximum number of days stocks end date may be set too and still included")
 	viper.BindPFlag("max_age", rootCmd.Flags().Lookup("max-age"))
