@@ -15,7 +15,7 @@ limitations under the License.
 */
 package main
 
-import "github.com/penny-vault/import-polygon-tickers/cmd"
+import "github.com/penny-vault/import-tickers/cmd"
 
 func main() {
 	cmd.Execute()

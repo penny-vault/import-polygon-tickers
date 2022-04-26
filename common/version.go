@@ -89,7 +89,7 @@ func (v Version) String() string {
 // BuildVersionString creates a version string. This is what you see when
 // running "import-fred version".
 func BuildVersionString() string {
-	program := "import-polygon-tickers"
+	program := "import-tickers"
 
 	version := "v" + CurrentVersion.String()
 

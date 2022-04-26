@@ -33,12 +33,12 @@ import (
 )
 
 const (
-	binaryName   = "import-polygon-tickers"
+	binaryName   = "import-tickers"
 	packageName  = "."
-	noGitLdflags = "-X github.com/penny-vault/import-polygon-tickers/common.buildDate=$BUILD_DATE"
+	noGitLdflags = "-X github.com/penny-vault/import-tickers/common.buildDate=$BUILD_DATE"
 )
 
-var ldflags = "-X github.com/penny-vault/import-polygon-tickers/common.commitHash=$COMMIT_HASH -X github.com/penny-vault/import-polygon-tickers/common.buildDate=$BUILD_DATE"
+var ldflags = "-X github.com/penny-vault/import-tickers/common.commitHash=$COMMIT_HASH -X github.com/penny-vault/import-tickers/common.buildDate=$BUILD_DATE"
 
 // allow user to override go executable by running as GOEXE=xxx make ... on unix-like systems
 var goexe = "go"
@@ -262,7 +262,7 @@ func runWith(env map[string]string, cmd string, inArgs ...interface{}) error {
 }
 
 var (
-	pkgPrefixLen = len("github.com/penny-vault/import-polygon-tickers")
+	pkgPrefixLen = len("github.com/penny-vault/import-tickers")
 	pkgs         []string
 	pkgsInit     sync.Once
 )

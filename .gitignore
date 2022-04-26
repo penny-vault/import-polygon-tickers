@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-import-polygon-tickers
+import-tickers
 
 # Test binary, built with `go test -c`
 *.test
@@ -19,4 +19,4 @@ import-polygon-tickers
 # vendor/
 
 # Configuration files
-import-polygon-tickers.toml
+import-tickers.toml

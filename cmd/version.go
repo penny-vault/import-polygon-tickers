@@ -17,7 +17,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/penny-vault/import-polygon-tickers/common"
+	"github.com/penny-vault/import-tickers/common"
 	"github.com/spf13/cobra"
 )
 
