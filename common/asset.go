@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"time"
 
 	_ "image/jpeg"
 	_ "image/png"
@@ -15,6 +16,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/xitongsys/parquet-go-source/local"
 	"github.com/xitongsys/parquet-go/parquet"
+	"github.com/xitongsys/parquet-go/reader"
 	"github.com/xitongsys/parquet-go/writer"
 )
 
@@ -22,7 +24,9 @@ type AssetType string
 
 const (
 	CommonStock AssetType = "Common Stock"
-	ETF         AssetType = "ETF"
+	ETF         AssetType = "Exchange Traded Ffund"
+	ETN         AssetType = "Exchange Traded Note"
+	Fund        AssetType = "Closed-End Fund"
 	MutualFund  AssetType = "Mutual Fund"
 )
 
@@ -41,12 +45,138 @@ type Asset struct {
 	DelistingDate        string    `json:"delisting_date" parquet:"name=delisting_date, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	Industry             string    `json:"industry" parquet:"name=industry, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	Sector               string    `json:"sector" parquet:"name=sector, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
-	SICCode              int       `json:"sic_code" parquet:"name=sic, type=INT32, encoding=PLAIN"`
-	SICDescription       string    `json:"sic_description" parquet:"name=sic_description, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	Icon                 []byte    `json:"icon"`
+	IconUrl              string    `json:"icon_url" parquet:"name=icon_url, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	CorporateUrl         string    `json:"corporate_url" parquet:"name=corporate_url, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	HeadquartersLocation string    `json:"headquarters_location" parquet:"name=headquarters_location, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	SimilarTickers       []string  `json:"similar_tickers" parquet:"name=similar_tickers, type=MAP, convertedtype=LIST, valuetype=BYTE_ARRAY, valueconvertedtype=UTF8"`
+	PolygonDetailAge     int64     `json:"polygon_detail_age" parquet:"name=polygon_detail_age, type=INT64"`
+	LastUpdated          int64     `json:"last_updated" parquet:"name=last_update, type=INT64"`
+}
+
+// Merge fields from b into a
+func MergeAsset(a *Asset, b *Asset) *Asset {
+	if a.Ticker != b.Ticker {
+		log.Error().
+			Str("a.Ticker", a.Ticker).
+			Str("b.Ticker", b.Ticker).
+			Msg("cannot merge assets with different tickers")
+		return a
+	}
+
+	if a.AssetType != b.AssetType {
+		log.Warn().
+			Str("Ticker", a.Ticker).
+			Str("CompositeFigi", a.CompositeFigi).
+			Str("a.AssetType", string(a.AssetType)).
+			Str("b.AssetType", string(b.AssetType)).
+			Msg("asset types changed for ticker - ignoring change")
+	}
+
+	if b.CIK != "" && a.CIK != b.CIK {
+		a.CIK = b.CIK
+		a.LastUpdated = time.Now().Unix()
+	}
+
+	if b.CUSIP != "" && a.CUSIP != b.CUSIP {
+		a.CUSIP = b.CUSIP
+		a.LastUpdated = time.Now().Unix()
+	}
+
+	if b.CompositeFigi != "" && a.CompositeFigi != b.CompositeFigi {
+		a.CompositeFigi = b.CompositeFigi
+		a.LastUpdated = time.Now().Unix()
+	}
+
+	if b.CorporateUrl != "" && a.CorporateUrl != b.CorporateUrl {
+		a.CorporateUrl = b.CorporateUrl
+		a.LastUpdated = time.Now().Unix()
+	}
+
+	if b.DelistingDate != "" && a.DelistingDate != b.DelistingDate {
+		a.DelistingDate = b.DelistingDate
+		a.LastUpdated = time.Now().Unix()
+	}
+
+	if b.Description != "" && a.Description != b.Description {
+		a.Description = b.Description
+		a.LastUpdated = time.Now().Unix()
+	}
+
+	if b.HeadquartersLocation != "" && a.HeadquartersLocation != b.HeadquartersLocation {
+		a.HeadquartersLocation = b.HeadquartersLocation
+		a.LastUpdated = time.Now().Unix()
+	}
+
+	if b.ISIN != "" && a.ISIN != b.ISIN {
+		a.ISIN = b.ISIN
+		a.LastUpdated = time.Now().Unix()
+	}
+
+	if b.IconUrl != "" && a.IconUrl != b.IconUrl {
+		a.IconUrl = b.IconUrl
+		a.LastUpdated = time.Now().Unix()
+	}
+
+	if b.Industry != "" && a.Industry != b.Industry {
+		a.Industry = b.Industry
+		a.LastUpdated = time.Now().Unix()
+	}
+
+	if b.ListingDate != "" && a.ListingDate != b.ListingDate {
+		a.ListingDate = b.ListingDate
+		a.LastUpdated = time.Now().Unix()
+	}
+
+	if b.Name != "" && a.Name != b.Name {
+		a.Name = b.Name
+		a.LastUpdated = time.Now().Unix()
+	}
+
+	if b.PrimaryExchange != "" && a.PrimaryExchange != b.PrimaryExchange {
+		a.PrimaryExchange = b.PrimaryExchange
+		a.LastUpdated = time.Now().Unix()
+	}
+
+	if b.Sector != "" && a.Sector != b.Sector {
+		a.Sector = b.Sector
+		a.LastUpdated = time.Now().Unix()
+	}
+
+	if b.ShareClassFigi != "" && a.ShareClassFigi != b.ShareClassFigi {
+		a.ShareClassFigi = b.ShareClassFigi
+		a.LastUpdated = time.Now().Unix()
+	}
+
+	// TODO: Merge similar tickers
+
+	return a
+}
+
+func ReadFromParquet(fn string) []*Asset {
+	fr, err := local.NewLocalFileReader(fn)
+	if err != nil {
+		log.Error().Err(err).Msg("can't open file")
+		return nil
+	}
+
+	pr, err := reader.NewParquetReader(fr, new(Asset), 4)
+	if err != nil {
+		log.Error().Err(err).Msg("can't create parquet reader")
+		return nil
+	}
+
+	num := int(pr.GetNumRows())
+	rec := make([]*Asset, num)
+	if err = pr.Read(&rec); err != nil {
+		log.Error().Err(err).Msg("parquet read error")
+		return nil
+	}
+
+	pr.ReadStop()
+	fr.Close()
+
+	return rec
 }
 
 func SaveToParquet(records []*Asset, fn string) error {
@@ -94,7 +224,6 @@ func SaveIcons(assets []*Asset, dirpath string) {
 	for _, asset := range assets {
 		subLog := log.With().Str("Ticker", asset.Ticker).Logger()
 		if len(asset.Icon) == 0 {
-			subLog.Info().Msg("skipping ticker because no image data exists")
 			continue
 		}
 		data := bytes.NewReader(asset.Icon)

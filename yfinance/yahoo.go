@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/penny-vault/import-tickers/common"
@@ -57,6 +58,7 @@ type YFinanceAssetProfile struct {
 // Download retrieves data for the list of assets from Yahoo! Finance
 func Download(asset *common.Asset, limit *rate.Limiter) *YFinanceAssetProfile {
 	result := YFinanceAssetProfile{}
+
 	limit.Wait(context.Background())
 	n := rand.Intn(len(kUrls))
 	url := fmt.Sprintf(kUrls[n], asset.Ticker)
@@ -91,10 +93,23 @@ func Download(asset *common.Asset, limit *rate.Limiter) *YFinanceAssetProfile {
 	res := wrapper.Profile.Result
 	if len(res) == 1 {
 		assetProfile := res[0].AssetProfile
-		asset.Description = assetProfile.Summary
-		asset.Industry = assetProfile.Industry
-		asset.Sector = assetProfile.Sector
-		asset.CorporateUrl = assetProfile.Website
+		if asset.Description != assetProfile.Summary {
+			asset.Description = assetProfile.Summary
+			asset.LastUpdated = time.Now().Unix()
+		}
+		if asset.Industry != assetProfile.Industry {
+			asset.Industry = assetProfile.Industry
+			asset.LastUpdated = time.Now().Unix()
+		}
+		if asset.Sector != assetProfile.Sector {
+			asset.Sector = assetProfile.Sector
+			asset.LastUpdated = time.Now().Unix()
+		}
+
+		if asset.CorporateUrl != assetProfile.Website {
+			asset.CorporateUrl = assetProfile.Website
+			asset.LastUpdated = time.Now().Unix()
+		}
 	}
 
 	return &result

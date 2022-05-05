@@ -19,7 +19,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/penny-vault/import-tickers/common"
@@ -138,16 +137,10 @@ func FetchAssetDetail(asset *common.Asset, limit *rate.Limiter) *common.Asset {
 	asset.ListingDate = assetDetail.Result.ListingDate
 	asset.CorporateUrl = assetDetail.Result.HomepageUrl
 	asset.Description = assetDetail.Result.Description
-	sic, err := strconv.ParseInt(assetDetail.Result.SicCode, 10, 32)
-	if err != nil {
-		subLog.Warn().Str("SICCodeStr", assetDetail.Result.SicCode).Msg("could not parse sic code")
-	} else {
-		asset.SICCode = int(sic)
-	}
 
 	// fetch icon
 	if assetDetail.Result.Branding.IconUrl != "" {
-		asset.Icon = FetchIcon(assetDetail.Result.Branding.IconUrl, limit)
+		asset.IconUrl = assetDetail.Result.Branding.IconUrl
 	}
 
 	return asset
@@ -210,6 +203,10 @@ func FetchAssets(assetTypes []string, maxPages int, limit *rate.Limiter) []*comm
 						newAsset.AssetType = common.CommonStock
 					case "ETF":
 						newAsset.AssetType = common.ETF
+					case "ETN":
+						newAsset.AssetType = common.ETN
+					case "Fund":
+						newAsset.AssetType = common.Fund
 					}
 					assets = append(assets, newAsset)
 				}

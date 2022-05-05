@@ -36,15 +36,19 @@ import (
 var cfgFile string
 var printAssets bool
 var skipFetchPolygon bool
-var skipFetchPolygonDetail bool
+var skipPolygonDetail bool
 var skipFetchTiingo bool
 var skipFetchYahoo bool
+var fetchIcons bool
+var maxPolygonDetail int
+var maxPolygonDetailAge int64
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "import-polygon",
-	Short: "Download end-of-day quotes from polygon",
-	Long:  `Download end-of-day quotes from polygon and save to penny-vault database`,
+	Use:   "import-tickers",
+	Short: "Download tradeable assets from polygon, tiingo, and Yahoo! finance",
+	Long: `Download tradeable assets from polygon, tiingo, and Yahoo!
+and save to penny-vault database`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
@@ -72,6 +76,7 @@ var rootCmd = &cobra.Command{
 
 		assets := []*common.Asset{}
 		if !skipFetchPolygon {
+			log.Info().Msg("fetching assets from polygon")
 			assets = polygon.FetchAssets(viper.GetStringSlice("asset_types"), maxPages, polygonRateLimiter)
 		}
 
@@ -79,31 +84,76 @@ var rootCmd = &cobra.Command{
 			assets = assets[:limit]
 		}
 
+		// merge with asset database
+		existingAssets := common.ReadFromParquet(viper.GetString("parquet_file"))
+		assetMapTicker := make(map[string]*common.Asset)
+		for _, asset := range existingAssets {
+			assetMapTicker[asset.Ticker] = asset
+		}
+		for ii, asset := range assets {
+			if origAsset, ok := assetMapTicker[asset.Ticker]; ok {
+				mergedAsset := common.MergeAsset(origAsset, asset)
+				assets[ii] = mergedAsset
+				assetMapTicker[mergedAsset.Ticker] = mergedAsset
+			} else {
+				// add new ticker to db
+				assetMapTicker[asset.Ticker] = asset
+			}
+		}
+
 		// Enrich with call to Polygon Asset Details
-		if !skipFetchPolygonDetail {
+		if !skipPolygonDetail {
+			log.Info().Msg("fetching asset details from polygon")
+			// NOTE: we only call asset details for assets that we
+			// haven't called details on recently. Since this is a
+			// slow call we also limit the number of assets we call
+			bar := progressbar.Default(int64(len(assets)))
+			now := time.Now().Unix()
+			cnt := 0
+			for _, asset := range assetMapTicker {
+				bar.Add(1)
+				if (asset.PolygonDetailAge + maxPolygonDetailAge) < now {
+					if cnt < maxPolygonDetail {
+						cnt++
+						polygon.FetchAssetDetail(asset, polygonRateLimiter)
+						asset.PolygonDetailAge = now
+					}
+				}
+			}
+		}
+
+		if fetchIcons {
+			log.Info().Msg("fetching asset icons")
 			bar := progressbar.Default(int64(len(assets)))
 			for _, asset := range assets {
 				bar.Add(1)
-				polygon.FetchAssetDetail(asset, polygonRateLimiter)
+				asset.Icon = polygon.FetchIcon(asset.IconUrl, polygonRateLimiter)
 			}
 		}
 
 		// Enrich with call to Yahoo Finance
 		if !skipFetchYahoo {
+			log.Info().Msg("fetching data from yahoo!")
 			bar := progressbar.Default(int64(len(assets)))
-			for _, asset := range assets {
+			for _, asset := range assetMapTicker {
 				bar.Add(1)
-				yfinance.Download(asset, yahooRateLimiter)
+				if asset.Industry == "" || asset.Sector == "" || asset.Description == "" {
+					go func(myAsset *common.Asset) {
+						yfinance.Download(myAsset, yahooRateLimiter)
+					}(asset)
+				}
 			}
 		}
+
+		// Search for FIGI's when the field is blank
 
 		if printAssets {
 			t := table.NewWriter()
 			t.SetOutputMirror(os.Stdout)
-			t.AppendHeader(table.Row{"Ticker", "Name", "Composite FIGI", "Exchange", "Description", "SIC", "SIC Description", "Industry", "Sector"})
+			t.AppendHeader(table.Row{"Ticker", "Name", "Composite FIGI", "Exchange", "Description", "Industry", "Sector"})
 			for _, asset := range assets {
 				t.AppendRow(table.Row{
-					asset.Ticker, asset.Name, asset.CompositeFigi, asset.PrimaryExchange, asset.Description, asset.SICCode, asset.SICDescription, asset.Industry, asset.Sector,
+					asset.Ticker, asset.Name, asset.CompositeFigi, asset.PrimaryExchange, asset.Description, asset.Industry, asset.Sector,
 				})
 			}
 			t.Render()
@@ -144,12 +194,19 @@ func init() {
 
 	// Local flags
 	rootCmd.Flags().BoolVar(&skipFetchPolygon, "skip-polygon", false, "do not fetch assets from polygon")
-	rootCmd.Flags().BoolVar(&skipFetchPolygonDetail, "skip-polygon-detail", false, "do not fetch asset details from polygon")
+	rootCmd.Flags().BoolVar(&skipPolygonDetail, "skip-polygon-detail", false, "do not fetch asset details from polygon")
 	rootCmd.Flags().BoolVar(&skipFetchTiingo, "skip-tiingo", false, "do not fetch assets from tiingo")
 	rootCmd.Flags().BoolVar(&skipFetchYahoo, "skip-yahoo", false, "do not fetch asset details from yahoo")
+	rootCmd.Flags().BoolVar(&fetchIcons, "fetch-icons", false, "fetch asset icons from polygon")
+
+	rootCmd.Flags().IntVar(&maxPolygonDetail, "max-polygon-detail", 100, "maximum polygon detail to fetch")
+	rootCmd.Flags().Int64Var(&maxPolygonDetailAge, "max-polygon-detail-age", 86400*365, "maximum number of seconds since last call to detail")
 
 	rootCmd.Flags().StringP("polygon-token", "t", "<not-set>", "polygon API key token")
 	viper.BindPFlag("polygon_token", rootCmd.Flags().Lookup("polygon-token"))
+
+	rootCmd.Flags().StringP("openfigi-apikey", "t", "<not-set>", "openfigi API key token")
+	viper.BindPFlag("openfigi_apikey", rootCmd.Flags().Lookup("openfigi-apikey"))
 
 	rootCmd.Flags().BoolVar(&printAssets, "print", true, "Print assets to screen")
 
@@ -159,20 +216,23 @@ func init() {
 	rootCmd.Flags().Uint32P("limit", "l", 0, "limit results to N")
 	viper.BindPFlag("limit", rootCmd.Flags().Lookup("limit"))
 
-	rootCmd.Flags().StringArray("asset-types", []string{"CS", "ETF", "MF"}, "types of assets to download. { CS = Common Stock, ETF = Exchange Traded Funds, MF = Mutual Funds}")
+	rootCmd.Flags().StringArray("asset-types", []string{"CS", "ETF", "ETN", "FUND", "MF"}, "types of assets to download. { CS = Common Stock, ETF = Exchange Traded Funds, ETN = Exchange Traded Note, FUND = Closed-end fund, MF = Mutual Funds}")
 	viper.BindPFlag("asset_types", rootCmd.Flags().Lookup("asset-types"))
 
 	rootCmd.Flags().Duration("max-age", 24*7*time.Hour, "maximum number of days stocks end date may be set too and still included")
 	viper.BindPFlag("max_age", rootCmd.Flags().Lookup("max-age"))
 
-	rootCmd.Flags().Int("polygon-rate-limit", 5, "polygon rate limit (items per minute)")
+	rootCmd.Flags().Int("polygon-rate-limit", 4, "polygon rate limit (items per minute)")
 	viper.BindPFlag("polygon_rate_limit", rootCmd.Flags().Lookup("polygon-rate-limit"))
 
-	rootCmd.Flags().Int("yahoo-rate-limit", 120, "yahoo rate limit (items per minute)")
+	rootCmd.Flags().Int("yahoo-rate-limit", 300, "yahoo rate limit (items per minute)")
 	viper.BindPFlag("yahoo_rate_limit", rootCmd.Flags().Lookup("yahoo-rate-limit"))
 
 	rootCmd.Flags().String("parquet-file", "", "save results to parquet")
 	viper.BindPFlag("parquet_file", rootCmd.Flags().Lookup("parquet-file"))
+
+	rootCmd.Flags().String("fidelity-tickers", "", "load dump fidelity data (used for CUSIP lookup of stocks and ETFs)")
+	viper.BindPFlag("fidelity_tickers", rootCmd.Flags().Lookup("fidelity-tickers"))
 }
 
 func initLog() {
