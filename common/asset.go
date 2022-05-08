@@ -24,7 +24,7 @@ type AssetType string
 
 const (
 	CommonStock AssetType = "Common Stock"
-	ETF         AssetType = "Exchange Traded Ffund"
+	ETF         AssetType = "Exchange Traded Fund"
 	ETN         AssetType = "Exchange Traded Note"
 	Fund        AssetType = "Closed-End Fund"
 	MutualFund  AssetType = "Mutual Fund"
@@ -52,6 +52,61 @@ type Asset struct {
 	SimilarTickers       []string  `json:"similar_tickers" parquet:"name=similar_tickers, type=MAP, convertedtype=LIST, valuetype=BYTE_ARRAY, valueconvertedtype=UTF8"`
 	PolygonDetailAge     int64     `json:"polygon_detail_age" parquet:"name=polygon_detail_age, type=INT64"`
 	LastUpdated          int64     `json:"last_updated" parquet:"name=last_update, type=INT64"`
+}
+
+type assetTmp struct {
+	Ticker               string   `json:"ticker" parquet:"name=ticker, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	Name                 string   `json:"Name" parquet:"name=name, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	Description          string   `json:"description" parquet:"name=description, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	PrimaryExchange      string   `json:"primary_exchange" parquet:"name=primary_exchange, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	AssetType            string   `json:"asset_type" parquet:"name=asset_type, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	CompositeFigi        string   `json:"composite_figi" parquet:"name=composite_figi, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	ShareClassFigi       string   `json:"share_class_figi" parquet:"name=share_class_figi, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	CUSIP                string   `json:"cusip" parquet:"name=cusip, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	ISIN                 string   `json:"isin" parquet:"name=isin, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	CIK                  string   `json:"cik" parquet:"name=cik, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	ListingDate          string   `json:"listing_date" parquet:"name=listing_date, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	DelistingDate        string   `json:"delisting_date" parquet:"name=delisting_date, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	Industry             string   `json:"industry" parquet:"name=industry, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	Sector               string   `json:"sector" parquet:"name=sector, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	IconUrl              string   `json:"icon_url" parquet:"name=icon_url, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	CorporateUrl         string   `json:"corporate_url" parquet:"name=corporate_url, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	HeadquartersLocation string   `json:"headquarters_location" parquet:"name=headquarters_location, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	SimilarTickers       []string `json:"similar_tickers" parquet:"name=similar_tickers, type=MAP, convertedtype=LIST, valuetype=BYTE_ARRAY, valueconvertedtype=UTF8"`
+	PolygonDetailAge     int64    `json:"polygon_detail_age" parquet:"name=polygon_detail_age, type=INT64"`
+	LastUpdated          int64    `json:"last_updated" parquet:"name=last_update, type=INT64"`
+}
+
+func BuildAssetMap(assets []*Asset) map[string]*Asset {
+	assetMap := make(map[string]*Asset, len(assets))
+	for _, asset := range assets {
+		assetMap[asset.Ticker] = asset
+	}
+	return assetMap
+}
+
+func MergeWithCurrent(assets []*Asset) []*Asset {
+	mergedAssets := make([]*Asset, 0, len(assets))
+	existingAssets := ReadFromParquet(viper.GetString("parquet_file"))
+	assetMapTicker := make(map[string]*Asset)
+	for _, asset := range existingAssets {
+		assetMapTicker[asset.Ticker] = asset
+	}
+	for ii, asset := range assets {
+		if origAsset, ok := assetMapTicker[asset.Ticker]; ok {
+			mergedAsset := MergeAsset(origAsset, asset)
+			assets[ii] = mergedAsset
+			assetMapTicker[mergedAsset.Ticker] = mergedAsset
+		} else {
+			// add new ticker to db
+			assetMapTicker[asset.Ticker] = asset
+			asset.LastUpdated = time.Now().Unix()
+		}
+	}
+	for _, asset := range assetMapTicker {
+		mergedAssets = append(mergedAssets, asset)
+	}
+	return mergedAssets
 }
 
 // Merge fields from b into a
@@ -167,7 +222,7 @@ func ReadFromParquet(fn string) []*Asset {
 	}
 
 	num := int(pr.GetNumRows())
-	rec := make([]*Asset, num)
+	rec := make([]*assetTmp, num)
 	if err = pr.Read(&rec); err != nil {
 		log.Error().Err(err).Msg("parquet read error")
 		return nil
@@ -176,7 +231,33 @@ func ReadFromParquet(fn string) []*Asset {
 	pr.ReadStop()
 	fr.Close()
 
-	return rec
+	assets := make([]*Asset, num)
+	for ii, asset := range rec {
+		assets[ii] = &Asset{
+			Ticker:               asset.Ticker,
+			Name:                 asset.Name,
+			Description:          asset.Description,
+			PrimaryExchange:      asset.PrimaryExchange,
+			AssetType:            AssetType(asset.AssetType),
+			CompositeFigi:        asset.CompositeFigi,
+			ShareClassFigi:       asset.ShareClassFigi,
+			CUSIP:                asset.CUSIP,
+			ISIN:                 asset.ISIN,
+			CIK:                  asset.CIK,
+			ListingDate:          asset.ListingDate,
+			DelistingDate:        asset.DelistingDate,
+			Industry:             asset.Industry,
+			Sector:               asset.Sector,
+			IconUrl:              asset.IconUrl,
+			CorporateUrl:         asset.CorporateUrl,
+			HeadquartersLocation: asset.HeadquartersLocation,
+			SimilarTickers:       asset.SimilarTickers,
+			PolygonDetailAge:     asset.PolygonDetailAge,
+			LastUpdated:          asset.LastUpdated,
+		}
+	}
+
+	return assets
 }
 
 func SaveToParquet(records []*Asset, fn string) error {

@@ -19,10 +19,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/penny-vault/import-tickers/common"
 	"github.com/rs/zerolog/log"
+	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/viper"
 	"golang.org/x/time/rate"
 )
@@ -71,30 +73,51 @@ type PolygonBranding struct {
 }
 
 type PolygonAssetDetail struct {
-	Ticker                      string           `json:"ticker"`
-	Name                        string           `json:"name"`
-	Market                      string           `json:"market"`
-	Locale                      string           `json:"locale"`
-	PrimaryExchange             string           `json:"primary_exchange"`
-	Type                        string           `json:"type"`
-	Active                      bool             `json:"bool"`
-	CurrencyName                string           `json:"currency_name"`
-	CIK                         string           `json:"cik"`
-	CompositeFigi               string           `json:"composite_figi"`
-	ShareClassFigi              string           `json:"share_class_figi"`
-	MarketCap                   float64          `json:"market_cap"`
-	PhoneNumber                 string           `json:"phone_number"`
-	Address                     *PolygonAddress  `json:"address"`
-	Description                 string           `json:"description"`
-	SicCode                     string           `json:"sic_code"`
-	SicDescription              string           `json:"sic_description"`
-	TickerRoot                  string           `json:"ticker_root"`
-	HomepageUrl                 string           `json:"homepage_url"`
-	TotalEmployees              int              `json:"total_employees"`
-	ListingDate                 string           `json:"list_date"`
-	Branding                    *PolygonBranding `json:"branding"`
-	ShareClassSharesOutstanding int              `json:"share_class_shares_outstanding"`
-	WeightedSharesOutstanding   int              `json:"weighted_shares_outstanding"`
+	Ticker                      string          `json:"ticker"`
+	Name                        string          `json:"name"`
+	Market                      string          `json:"market"`
+	Locale                      string          `json:"locale"`
+	PrimaryExchange             string          `json:"primary_exchange"`
+	Type                        string          `json:"type"`
+	Active                      bool            `json:"bool"`
+	CurrencyName                string          `json:"currency_name"`
+	CIK                         string          `json:"cik"`
+	CompositeFigi               string          `json:"composite_figi"`
+	ShareClassFigi              string          `json:"share_class_figi"`
+	MarketCap                   float64         `json:"market_cap"`
+	PhoneNumber                 string          `json:"phone_number"`
+	Address                     *PolygonAddress `json:"address"`
+	Description                 string          `json:"description"`
+	SicCode                     string          `json:"sic_code"`
+	SicDescription              string          `json:"sic_description"`
+	TickerRoot                  string          `json:"ticker_root"`
+	HomepageUrl                 string          `json:"homepage_url"`
+	TotalEmployees              int             `json:"total_employees"`
+	ListingDate                 string          `json:"list_date"`
+	Branding                    PolygonBranding `json:"branding"`
+	ShareClassSharesOutstanding int             `json:"share_class_shares_outstanding"`
+	WeightedSharesOutstanding   int             `json:"weighted_shares_outstanding"`
+}
+
+func rateLimit() *rate.Limiter {
+	dur := time.Duration(int64(time.Second) * 60 / viper.GetInt64("polygon.rate_limit"))
+	polygonRate := rate.Every(dur)
+	return rate.NewLimiter(polygonRate, 2)
+}
+
+func EnrichDetail(assets []*common.Asset) {
+	maxPolygonDetailAge := viper.GetInt64("polygon.detail_age")
+	polygonRateLimiter := rateLimit()
+	bar := progressbar.Default(int64(len(assets)))
+	now := time.Now().Unix()
+	for _, asset := range assets {
+		bar.Add(1)
+		if asset.AssetType != common.MutualFund && (asset.PolygonDetailAge+maxPolygonDetailAge) < now {
+			FetchAssetDetail(asset, polygonRateLimiter)
+			asset.PolygonDetailAge = now
+		}
+	}
+
 }
 
 func FetchAssetDetail(asset *common.Asset, limit *rate.Limiter) *common.Asset {
@@ -103,7 +126,7 @@ func FetchAssetDetail(asset *common.Asset, limit *rate.Limiter) *common.Asset {
 	client := resty.New()
 
 	urlClean := fmt.Sprintf("https://api.polygon.io/v3/reference/tickers/%s?apiKey=", asset.Ticker)
-	url := fmt.Sprintf("%s%s", urlClean, viper.GetString("polygon_token"))
+	url := fmt.Sprintf("%s%s", urlClean, viper.GetString("polygon.token"))
 	subLog := log.With().Str("Url", urlClean).Str("Source", "polygon.io").Logger()
 
 	resp, err := client.R().Get(url)
@@ -139,8 +162,10 @@ func FetchAssetDetail(asset *common.Asset, limit *rate.Limiter) *common.Asset {
 	asset.Description = assetDetail.Result.Description
 
 	// fetch icon
-	if assetDetail.Result.Branding.IconUrl != "" {
-		asset.IconUrl = assetDetail.Result.Branding.IconUrl
+	if assetDetail.Count > 0 {
+		if assetDetail.Result.Branding.IconUrl != "" {
+			asset.IconUrl = assetDetail.Result.Branding.IconUrl
+		}
 	}
 
 	return asset
@@ -172,7 +197,8 @@ func FetchIcon(url string, limit *rate.Limiter) []byte {
 	return body
 }
 
-func FetchAssets(assetTypes []string, maxPages int, limit *rate.Limiter) []*common.Asset {
+func FetchAssets(assetTypes []string, maxPages int) []*common.Asset {
+	limit := rateLimit()
 	assets := []*common.Asset{}
 	pageNum := 1
 	for _, assetType := range assetTypes {

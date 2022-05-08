@@ -17,29 +17,21 @@ package cmd
 
 import (
 	"fmt"
-	"math"
 	"os"
 	"time"
 
-	"github.com/jedib0t/go-pretty/table"
 	"github.com/penny-vault/import-tickers/common"
+	"github.com/penny-vault/import-tickers/figi"
 	"github.com/penny-vault/import-tickers/polygon"
+	"github.com/penny-vault/import-tickers/tiingo"
 	"github.com/penny-vault/import-tickers/yfinance"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"golang.org/x/time/rate"
 )
 
 var cfgFile string
-var printAssets bool
-var skipFetchPolygon bool
-var skipPolygonDetail bool
-var skipFetchTiingo bool
-var skipFetchYahoo bool
-var fetchIcons bool
 var maxPolygonDetail int
 var maxPolygonDetailAge int64
 
@@ -56,108 +48,28 @@ and save to penny-vault database`,
 			Strs("AssetTypes", viper.GetStringSlice("asset_types")).
 			Msg("loading tickers")
 
-		// initialize polygon rate limiter
-		dur := time.Duration(int64(time.Second) * 60 / viper.GetInt64("polygon_rate_limit"))
-		polygonRate := rate.Every(dur)
-		polygonRateLimiter := rate.NewLimiter(polygonRate, 2)
-
-		// initialize yahoo rate limiter
-		dur = time.Duration(int64(time.Second) * 60 / viper.GetInt64("yahoo_rate_limit"))
-		yahooRate := rate.Every(dur)
-		yahooRateLimiter := rate.NewLimiter(yahooRate, 2)
-
-		limit := viper.GetInt("limit")
-		maxPages := 25
-		if limit > 0 {
-			maxPages = int(math.Ceil(float64(limit) / 1000))
-		}
-
 		// Fetch base list of assets
-
-		assets := []*common.Asset{}
-		if !skipFetchPolygon {
-			log.Info().Msg("fetching assets from polygon")
-			assets = polygon.FetchAssets(viper.GetStringSlice("asset_types"), maxPages, polygonRateLimiter)
-		}
-
-		if limit > 0 && limit < len(assets) {
-			assets = assets[:limit]
-		}
+		log.Info().Msg("fetching assets from polygon")
+		assets := polygon.FetchAssets(viper.GetStringSlice("asset_types"), 25)
 
 		// merge with asset database
-		existingAssets := common.ReadFromParquet(viper.GetString("parquet_file"))
-		assetMapTicker := make(map[string]*common.Asset)
-		for _, asset := range existingAssets {
-			assetMapTicker[asset.Ticker] = asset
-		}
-		for ii, asset := range assets {
-			if origAsset, ok := assetMapTicker[asset.Ticker]; ok {
-				mergedAsset := common.MergeAsset(origAsset, asset)
-				assets[ii] = mergedAsset
-				assetMapTicker[mergedAsset.Ticker] = mergedAsset
-			} else {
-				// add new ticker to db
-				assetMapTicker[asset.Ticker] = asset
-			}
-		}
+		log.Info().Msg("reading existing assets and merging with those downloaded from polygon")
+		assets = common.MergeWithCurrent(assets)
 
 		// Enrich with call to Polygon Asset Details
-		if !skipPolygonDetail {
-			log.Info().Msg("fetching asset details from polygon")
-			// NOTE: we only call asset details for assets that we
-			// haven't called details on recently. Since this is a
-			// slow call we also limit the number of assets we call
-			bar := progressbar.Default(int64(len(assets)))
-			now := time.Now().Unix()
-			cnt := 0
-			for _, asset := range assetMapTicker {
-				bar.Add(1)
-				if (asset.PolygonDetailAge + maxPolygonDetailAge) < now {
-					if cnt < maxPolygonDetail {
-						cnt++
-						polygon.FetchAssetDetail(asset, polygonRateLimiter)
-						asset.PolygonDetailAge = now
-					}
-				}
-			}
-		}
-
-		if fetchIcons {
-			log.Info().Msg("fetching asset icons")
-			bar := progressbar.Default(int64(len(assets)))
-			for _, asset := range assets {
-				bar.Add(1)
-				asset.Icon = polygon.FetchIcon(asset.IconUrl, polygonRateLimiter)
-			}
-		}
+		log.Info().Msg("fetching asset details from polygon")
+		polygon.EnrichDetail(assets)
 
 		// Enrich with call to Yahoo Finance
-		if !skipFetchYahoo {
-			log.Info().Msg("fetching data from yahoo!")
-			bar := progressbar.Default(int64(len(assets)))
-			for _, asset := range assetMapTicker {
-				bar.Add(1)
-				if asset.Industry == "" || asset.Sector == "" || asset.Description == "" {
-					go func(myAsset *common.Asset) {
-						yfinance.Download(myAsset, yahooRateLimiter)
-					}(asset)
-				}
-			}
-		}
+		log.Info().Msg("fetching data from yahoo!")
+		yfinance.Enrich(assets, 0)
+
+		// Fetch MutualFund tickers from tiingo
+		assets = tiingo.GetMutualFundTickers(assets)
 
 		// Search for FIGI's when the field is blank
-
-		if printAssets {
-			t := table.NewWriter()
-			t.SetOutputMirror(os.Stdout)
-			t.AppendHeader(table.Row{"Ticker", "Name", "Composite FIGI", "Exchange", "Description", "Industry", "Sector"})
-			for _, asset := range assets {
-				t.AppendRow(table.Row{
-					asset.Ticker, asset.Name, asset.CompositeFigi, asset.PrimaryExchange, asset.Description, asset.Industry, asset.Sector,
-				})
-			}
-			t.Render()
-		}
+		log.Info().Msg("fetching missing figi's")
+		figi.Enrich(assets)
 
 		if viper.GetString("parquet_file") != "" {
 			common.SaveToParquet(assets, viper.GetString("parquet_file"))
@@ -191,30 +103,25 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is import-tickers.toml)")
 	rootCmd.PersistentFlags().Bool("log.json", false, "print logs as json to stderr")
 	viper.BindPFlag("log.json", rootCmd.PersistentFlags().Lookup("log.json"))
+	rootCmd.PersistentFlags().StringP("database-url", "d", "host=localhost port=5432", "DSN for database connection")
+	viper.BindPFlag("database_url", rootCmd.PersistentFlags().Lookup("database-url"))
+	rootCmd.PersistentFlags().String("parquet-file", "tickers.parquet", "save results to parquet")
+	viper.BindPFlag("parquet_file", rootCmd.PersistentFlags().Lookup("parquet-file"))
+
+	// polygon
+	rootCmd.PersistentFlags().String("polygon-token", "<not-set>", "polygon API key token")
+	viper.BindPFlag("polygon.token", rootCmd.PersistentFlags().Lookup("polygon-token"))
+	rootCmd.PersistentFlags().Int64("max-polygon-detail-age", 86400*365, "maximum number of seconds since last call to detail")
+	viper.BindPFlag("polygon.detail_age", rootCmd.PersistentFlags().Lookup("max-polygon-detail-age"))
+	rootCmd.PersistentFlags().Int("polygon-rate-limit", 4, "polygon rate limit (items per minute)")
+	viper.BindPFlag("polygon.rate_limit", rootCmd.PersistentFlags().Lookup("polygon-rate-limit"))
+
+	// openfigi
+	rootCmd.PersistentFlags().String("openfigi-apikey", "<not-set>", "openfigi API key token")
+	viper.BindPFlag("openfigi.apikey", rootCmd.PersistentFlags().Lookup("openfigi-apikey"))
 
 	// Local flags
-	rootCmd.Flags().BoolVar(&skipFetchPolygon, "skip-polygon", false, "do not fetch assets from polygon")
-	rootCmd.Flags().BoolVar(&skipPolygonDetail, "skip-polygon-detail", false, "do not fetch asset details from polygon")
-	rootCmd.Flags().BoolVar(&skipFetchTiingo, "skip-tiingo", false, "do not fetch assets from tiingo")
-	rootCmd.Flags().BoolVar(&skipFetchYahoo, "skip-yahoo", false, "do not fetch asset details from yahoo")
-	rootCmd.Flags().BoolVar(&fetchIcons, "fetch-icons", false, "fetch asset icons from polygon")
-
 	rootCmd.Flags().IntVar(&maxPolygonDetail, "max-polygon-detail", 100, "maximum polygon detail to fetch")
-	rootCmd.Flags().Int64Var(&maxPolygonDetailAge, "max-polygon-detail-age", 86400*365, "maximum number of seconds since last call to detail")
-
-	rootCmd.Flags().StringP("polygon-token", "t", "<not-set>", "polygon API key token")
-	viper.BindPFlag("polygon_token", rootCmd.Flags().Lookup("polygon-token"))
-
-	rootCmd.Flags().StringP("openfigi-apikey", "t", "<not-set>", "openfigi API key token")
-	viper.BindPFlag("openfigi_apikey", rootCmd.Flags().Lookup("openfigi-apikey"))
-
-	rootCmd.Flags().BoolVar(&printAssets, "print", true, "Print assets to screen")
-
-	rootCmd.Flags().StringP("database-url", "d", "host=localhost port=5432", "DSN for database connection")
-	viper.BindPFlag("database_url", rootCmd.Flags().Lookup("database-url"))
-
-	rootCmd.Flags().Uint32P("limit", "l", 0, "limit results to N")
-	viper.BindPFlag("limit", rootCmd.Flags().Lookup("limit"))
 
 	rootCmd.Flags().StringArray("asset-types", []string{"CS", "ETF", "ETN", "FUND", "MF"}, "types of assets to download. { CS = Common Stock, ETF = Exchange Traded Funds, ETN = Exchange Traded Note, FUND = Closed-end fund, MF = Mutual Funds}")
 	viper.BindPFlag("asset_types", rootCmd.Flags().Lookup("asset-types"))
@@ -222,17 +129,8 @@ func init() {
 	rootCmd.Flags().Duration("max-age", 24*7*time.Hour, "maximum number of days stocks end date may be set too and still included")
 	viper.BindPFlag("max_age", rootCmd.Flags().Lookup("max-age"))
 
-	rootCmd.Flags().Int("polygon-rate-limit", 4, "polygon rate limit (items per minute)")
-	viper.BindPFlag("polygon_rate_limit", rootCmd.Flags().Lookup("polygon-rate-limit"))
-
-	rootCmd.Flags().Int("yahoo-rate-limit", 300, "yahoo rate limit (items per minute)")
-	viper.BindPFlag("yahoo_rate_limit", rootCmd.Flags().Lookup("yahoo-rate-limit"))
-
-	rootCmd.Flags().String("parquet-file", "", "save results to parquet")
-	viper.BindPFlag("parquet_file", rootCmd.Flags().Lookup("parquet-file"))
-
-	rootCmd.Flags().String("fidelity-tickers", "", "load dump fidelity data (used for CUSIP lookup of stocks and ETFs)")
-	viper.BindPFlag("fidelity_tickers", rootCmd.Flags().Lookup("fidelity-tickers"))
+	rootCmd.Flags().Int("yahoo-rate-limit", 120, "yahoo rate limit (items per minute)")
+	viper.BindPFlag("yahoo.rate_limit", rootCmd.Flags().Lookup("yahoo-rate-limit"))
 }
 
 func initLog() {
