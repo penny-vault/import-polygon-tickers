@@ -105,16 +105,21 @@ func rateLimit() *rate.Limiter {
 	return rate.NewLimiter(polygonRate, 2)
 }
 
-func EnrichDetail(assets []*common.Asset) {
+func EnrichDetail(assets []*common.Asset, max int) {
 	maxPolygonDetailAge := viper.GetInt64("polygon.detail_age")
 	polygonRateLimiter := rateLimit()
 	bar := progressbar.Default(int64(len(assets)))
 	now := time.Now().Unix()
+	count := 0
 	for _, asset := range assets {
 		bar.Add(1)
+		count++
 		if asset.AssetType != common.MutualFund && (asset.PolygonDetailAge+maxPolygonDetailAge) < now {
 			FetchAssetDetail(asset, polygonRateLimiter)
 			asset.PolygonDetailAge = now
+		}
+		if max > 0 && max < count {
+			break
 		}
 	}
 
@@ -174,7 +179,7 @@ func FetchAssetDetail(asset *common.Asset, limit *rate.Limiter) *common.Asset {
 func FetchIcon(url string, limit *rate.Limiter) []byte {
 	limit.Wait(context.Background())
 	subLog := log.With().Str("Url", url).Str("Source", "polygon.io").Logger()
-	url = fmt.Sprintf("%s?apiKey=%s", url, viper.GetString("polygon_token"))
+	url = fmt.Sprintf("%s?apiKey=%s", url, viper.GetString("polygon.token"))
 
 	client := resty.New()
 	resp, err := client.R().Get(url)
@@ -252,7 +257,7 @@ func fetchAssetPage(url string) PolygonAssetsResponse {
 	// add url to log BEFORE the apikey is added in order not to expose a secret
 	subLog := log.With().Str("Url", url).Str("Source", "polygon.io").Logger()
 	// add apiKey
-	url = fmt.Sprintf("%s&apiKey=%s", url, viper.GetString("polygon_token"))
+	url = fmt.Sprintf("%s&apiKey=%s", url, viper.GetString("polygon.token"))
 
 	assetsResponse := PolygonAssetsResponse{}
 	client := resty.New()

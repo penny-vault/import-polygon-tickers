@@ -85,6 +85,16 @@ func BuildAssetMap(assets []*Asset) map[string]*Asset {
 	return assetMap
 }
 
+func CleanAssets(assets []*Asset) []*Asset {
+	clean := make([]*Asset, 0, len(assets))
+	for _, asset := range assets {
+		if asset.CompositeFigi != "" {
+			clean = append(clean, asset)
+		}
+	}
+	return clean
+}
+
 func MergeWithCurrent(assets []*Asset) []*Asset {
 	mergedAssets := make([]*Asset, 0, len(assets))
 	existingAssets := ReadFromParquet(viper.GetString("parquet_file"))

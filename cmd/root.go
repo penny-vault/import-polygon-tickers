@@ -20,6 +20,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/penny-vault/import-tickers/backblaze"
 	"github.com/penny-vault/import-tickers/common"
 	"github.com/penny-vault/import-tickers/figi"
 	"github.com/penny-vault/import-tickers/polygon"
@@ -48,6 +49,8 @@ and save to penny-vault database`,
 			Strs("AssetTypes", viper.GetStringSlice("asset_types")).
 			Msg("loading tickers")
 
+		//backblaze.Download(viper.GetString("parquet_file"), viper.GetString("backblaze.bucket"))
+
 		// Fetch base list of assets
 		log.Info().Msg("fetching assets from polygon")
 		assets := polygon.FetchAssets(viper.GetStringSlice("asset_types"), 25)
@@ -58,11 +61,7 @@ and save to penny-vault database`,
 
 		// Enrich with call to Polygon Asset Details
 		log.Info().Msg("fetching asset details from polygon")
-		polygon.EnrichDetail(assets)
-
-		// Enrich with call to Yahoo Finance
-		log.Info().Msg("fetching data from yahoo!")
-		yfinance.Enrich(assets, 0)
+		polygon.EnrichDetail(assets, 5)
 
 		// Fetch MutualFund tickers from tiingo
 		assets = tiingo.GetMutualFundTickers(assets)
@@ -71,15 +70,22 @@ and save to penny-vault database`,
 		log.Info().Msg("fetching missing figi's")
 		figi.Enrich(assets)
 
+		// cleanup assets
+		assets = common.CleanAssets(assets)
+
+		// Enrich with call to Yahoo Finance
+		log.Info().Msg("fetching data from yahoo!")
+		yfinance.Enrich(assets, 5)
+
 		if viper.GetString("parquet_file") != "" {
 			common.SaveToParquet(assets, viper.GetString("parquet_file"))
 		}
 
-		if viper.GetString("database_url") != "" {
-			common.SaveToDatabase(assets, viper.GetString("database_url"))
+		if viper.GetString("database.url") != "" {
+			common.SaveToDatabase(assets, viper.GetString("database.url"))
 		}
 
-		common.SaveIcons(assets, ".")
+		backblaze.Upload(viper.GetString("parquet_file"), viper.GetString("backblaze.bucket"), ".")
 	},
 }
 
@@ -104,9 +110,16 @@ func init() {
 	rootCmd.PersistentFlags().Bool("log.json", false, "print logs as json to stderr")
 	viper.BindPFlag("log.json", rootCmd.PersistentFlags().Lookup("log.json"))
 	rootCmd.PersistentFlags().StringP("database-url", "d", "host=localhost port=5432", "DSN for database connection")
-	viper.BindPFlag("database_url", rootCmd.PersistentFlags().Lookup("database-url"))
+	viper.BindPFlag("database.url", rootCmd.PersistentFlags().Lookup("database-url"))
 	rootCmd.PersistentFlags().String("parquet-file", "tickers.parquet", "save results to parquet")
 	viper.BindPFlag("parquet_file", rootCmd.PersistentFlags().Lookup("parquet-file"))
+
+	rootCmd.PersistentFlags().String("backblaze-application-id", "<not-set>", "backblaze application id")
+	viper.BindPFlag("backblaze.application_id", rootCmd.PersistentFlags().Lookup("backblaze-application-id"))
+	rootCmd.PersistentFlags().String("backblaze-application-key", "<not-set>", "backblaze application key")
+	viper.BindPFlag("backblaze.application_key", rootCmd.PersistentFlags().Lookup("backblaze-application-key"))
+	rootCmd.PersistentFlags().String("backblaze-bucket", "ticker-info", "backblaze bucket")
+	viper.BindPFlag("backblaze.bucket", rootCmd.PersistentFlags().Lookup("backblaze-bucket"))
 
 	// polygon
 	rootCmd.PersistentFlags().String("polygon-token", "<not-set>", "polygon API key token")
