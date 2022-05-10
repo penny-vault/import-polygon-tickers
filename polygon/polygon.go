@@ -56,8 +56,6 @@ type PolygonAssetDetailResponse struct {
 	Result    *PolygonAssetDetail `json:"results"`
 	Status    string              `json:"status"`
 	RequestId string              `json:"request_id"`
-	Count     int                 `json:"count"`
-	NextUrl   string              `json:"next_url"`
 }
 
 type PolygonAddress struct {
@@ -167,10 +165,8 @@ func FetchAssetDetail(asset *common.Asset, limit *rate.Limiter) *common.Asset {
 	asset.Description = assetDetail.Result.Description
 
 	// fetch icon
-	if assetDetail.Count > 0 {
-		if assetDetail.Result.Branding.IconUrl != "" {
-			asset.IconUrl = assetDetail.Result.Branding.IconUrl
-		}
+	if assetDetail.Result.Branding.IconUrl != "" {
+		asset.IconUrl = assetDetail.Result.Branding.IconUrl
 	}
 
 	return asset
