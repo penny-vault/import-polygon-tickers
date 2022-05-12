@@ -217,6 +217,4 @@ func Download(asset *common.Asset) {
 
 		return
 	}
-
-	return
 }

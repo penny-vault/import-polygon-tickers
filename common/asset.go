@@ -12,6 +12,7 @@ import (
 	_ "image/png"
 
 	"github.com/jackc/pgx/v4"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	"github.com/xitongsys/parquet-go-source/local"
@@ -52,6 +53,7 @@ type Asset struct {
 	SimilarTickers       []string  `json:"similar_tickers" parquet:"name=similar_tickers, type=MAP, convertedtype=LIST, valuetype=BYTE_ARRAY, valueconvertedtype=UTF8"`
 	PolygonDetailAge     int64     `json:"polygon_detail_age" parquet:"name=polygon_detail_age, type=INT64"`
 	LastUpdated          int64     `json:"last_updated" parquet:"name=last_update, type=INT64"`
+	Source               string
 }
 
 type assetTmp struct {
@@ -98,24 +100,44 @@ func CleanAssets(assets []*Asset) []*Asset {
 func MergeWithCurrent(assets []*Asset) []*Asset {
 	mergedAssets := make([]*Asset, 0, len(assets))
 	existingAssets := ReadFromParquet(viper.GetString("parquet_file"))
-	assetMapTicker := make(map[string]*Asset)
+	assetMapTickerExisting := make(map[string]*Asset)
+	assetMapTickerNew := make(map[string]*Asset)
+
+	// build hash maps
 	for _, asset := range existingAssets {
-		assetMapTicker[asset.Ticker] = asset
+		// remove delisted tickers
+		if asset.DelistingDate == "" {
+			assetMapTickerExisting[asset.Ticker] = asset
+		}
 	}
+	for _, asset := range assets {
+		assetMapTickerNew[asset.Ticker] = asset
+	}
+
+	// add all new assets
 	for ii, asset := range assets {
-		if origAsset, ok := assetMapTicker[asset.Ticker]; ok {
+		// does the asset already exist?
+		if origAsset, ok := assetMapTickerExisting[asset.Ticker]; ok {
 			mergedAsset := MergeAsset(origAsset, asset)
 			assets[ii] = mergedAsset
-			assetMapTicker[mergedAsset.Ticker] = mergedAsset
+			mergedAssets = append(mergedAssets, mergedAsset)
 		} else {
 			// add new ticker to db
-			assetMapTicker[asset.Ticker] = asset
+			mergedAssets = append(mergedAssets, asset)
 			asset.LastUpdated = time.Now().Unix()
 		}
 	}
-	for _, asset := range assetMapTicker {
-		mergedAssets = append(mergedAssets, asset)
+
+	// mark assets not in the assetMapTickerNew as delisted
+	for _, asset := range existingAssets {
+		if _, ok := assetMapTickerNew[asset.Ticker]; !ok {
+			log.Debug().Str("Ticker", asset.Ticker).Str("CompositeFigi", asset.CompositeFigi).Msg("asset de-listed")
+			asset.DelistingDate = time.Now().Format("2006-01-02")
+			asset.LastUpdated = time.Now().Unix()
+			mergedAssets = append(mergedAssets, asset)
+		}
 	}
+
 	return mergedAssets
 }
 
@@ -213,7 +235,10 @@ func MergeAsset(a *Asset, b *Asset) *Asset {
 		a.LastUpdated = time.Now().Unix()
 	}
 
-	// TODO: Merge similar tickers
+	if a.Source != b.Source {
+		a.Source = b.Source
+		a.LastUpdated = time.Now().Unix()
+	}
 
 	return a
 }
@@ -328,27 +353,36 @@ func SaveIcons(assets []*Asset, dirpath string) {
 	}
 }
 
-func SaveToDatabase(assets []*Asset, dsn string) error {
+func SaveToDatabase(assets []*Asset, dsn string) {
 	log.Info().Msg("saving to database")
-	conn, err := pgx.Connect(context.Background(), viper.GetString("DATABASE_URL"))
+	conn, err := pgx.Connect(context.Background(), viper.GetString("database.url"))
 	if err != nil {
 		log.Error().Err(err).Msg("could not connect to database")
+		return
 	}
 	defer conn.Close(context.Background())
-	/*
-		for _, quote := range quotes {
-			_, err := conn.Exec(context.Background(),
-				`INSERT INTO eod_v1 (
+	for _, asset := range assets {
+		_, err := conn.Exec(context.Background(),
+			`INSERT INTO assets (
 				"ticker",
+				"asset_type",
+				"cik",
 				"composite_figi",
-				"event_date",
-				"open",
-				"high",
-				"low",
-				"close",
-				"volume",
-				"dividend",
-				"split_factor",
+				"share_class_figi",
+				"primary_exchange",
+				"cusip",
+				"isin",
+				"active",
+				"name",
+				"description",
+				"corporate_url",
+				"sector",
+				"industry",
+				"logo_url",
+				"similar_tickers",
+				"listed_utc",
+				"delisted_utc",
+				"last_updated_utc",
 				"source"
 			) VALUES (
 				$1,
@@ -361,29 +395,82 @@ func SaveToDatabase(assets []*Asset, dsn string) error {
 				$8,
 				$9,
 				$10,
-				$11
-			) ON CONFLICT ON CONSTRAINT eod_v1_pkey
+				$11,
+				$12,
+				$13,
+				$14,
+				$15,
+				$16,
+				$17,
+				$18,
+				$19,
+				$20
+			) ON CONFLICT ON CONSTRAINT assets_pkey
 			DO UPDATE SET
-				open = EXCLUDED.open,
-				high = EXCLUDED.high,
-				low = EXCLUDED.low,
-				close = EXCLUDED.close,
-				volume = EXCLUDED.volume,
-				dividend = EXCLUDED.dividend,
-				split_factor = EXCLUDED.split_factor,
-				source = EXCLUDED.source;`,
-				quote.Ticker, quote.CompositeFigi, quote.Date,
-				quote.Open, quote.High, quote.Low, quote.Close, quote.Volume,
-				quote.Dividend, quote.Split, "fred.stlouisfed.org")
-			if err != nil {
-				query := fmt.Sprintf(`INSERT INTO eod_v1 ("ticker", "composite_figi", "event_date", "open", "high", "low", "close", "volume", "dividend", "split_factor", "source") VALUES ('%s', '%s', '%s', %.5f, %.5f, %.5f, %.5f, %d, %.5f, %.5f, '%s') ON CONFLICT ON CONSTRAINT eod_v1_pkey DO UPDATE SET open = EXCLUDED.open, high = EXCLUDED.high, low = EXCLUDED.low, close = EXCLUDED.close, volume = EXCLUDED.volume, dividend = EXCLUDED.dividend, split_factor = EXCLUDED.split_factor, source = EXCLUDED.source;`,
-					quote.Ticker, quote.CompositeFigi, quote.Date,
-					quote.Open, quote.High, quote.Low, quote.Close, quote.Volume,
-					quote.Dividend, quote.Split, "fred.stlouisfed.org")
-				log.Error().Err(err).Str("Query", query).Msg("error saving EOD quote to database")
-			}
+				cik = EXCLUDED.cik,
+				composite_figi = EXCLUDED.composite_figi,
+				share_class_figi = EXCLUDED.share_class_figi,
+				primary_exchange = EXCLUDED.primary_exchange,
+				cusip = EXCLUDED.cusip,
+				isin = EXCLUDED.isin,
+				active = EXCLUDED.active,
+				name = EXCLUDED.name,
+				description = EXCLUDED.description,
+				corporate_url = EXCLUDED.corporate_url,
+				sector = EXCLUDED.sector,
+				industry = EXCLUDED.industry,
+				logo_url = EXCLUDED.logo_url,
+				similar_tickers = EXCLUDED.similar_tickers,
+				listed_utc = EXCLUDED.listed_utc,
+				delisted_utc = EXCLUDED.delisted_utc,
+				last_updated_utc = EXCLUDED.last_updated_utc,
+				source = EXCLUDED.source
+			;`,
+			asset.Ticker,
+			asset.AssetType,
+			asset.CIK,
+			asset.CompositeFigi,
+			asset.ShareClassFigi,
+			asset.PrimaryExchange,
+			asset.CUSIP,
+			asset.ISIN,
+			asset.DelistingDate == "",
+			asset.Name,
+			asset.Description,
+			asset.CorporateUrl,
+			asset.Sector,
+			asset.Industry,
+			asset.IconUrl,
+			asset.SimilarTickers,
+			asset.ListingDate,
+			asset.DelistingDate,
+			asset.LastUpdated,
+			asset.Source,
+		)
+		if err != nil {
+			log.Error().Err(err).Msg("error saving asset to database")
 		}
-	*/
+	}
+}
 
-	return nil
+func (asset *Asset) MarshalZerologObject(e *zerolog.Event) {
+	e.Str("Ticker", asset.Ticker)
+	e.Str("Name", asset.Name)
+	e.Str("Description", asset.Description)
+	e.Str("PrimaryExchange", asset.PrimaryExchange)
+	e.Str("AssetType", string(asset.AssetType))
+	e.Str("CompositeFigi", asset.CompositeFigi)
+	e.Str("ShareClassFigi", asset.ShareClassFigi)
+	e.Str("CUSIP", asset.CUSIP)
+	e.Str("ISIN", asset.ISIN)
+	e.Str("CIK", asset.CIK)
+	e.Str("ListingDate", asset.ListingDate)
+	e.Str("DelistingDate", asset.DelistingDate)
+	e.Str("Industry", asset.Industry)
+	e.Str("Sector", asset.Sector)
+	e.Str("IconUrl", asset.IconUrl)
+	e.Str("CorporateUrl", asset.CorporateUrl)
+	e.Str("HeadquartersLocation", asset.HeadquartersLocation)
+	e.Int64("PolygonDetailAge", asset.PolygonDetailAge)
+	e.Int64("LastUpdate", asset.LastUpdated)
 }

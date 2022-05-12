@@ -104,6 +104,7 @@ func FetchTickers() []*common.Asset {
 				ListingDate:     asset.StartDate,
 				DelistingDate:   asset.EndDate,
 				PrimaryExchange: asset.Exchange,
+				Source:          "api.tiingo.com",
 			}
 			if asset.EndDate != "" {
 				endDate, err := time.Parse("2006-01-02", asset.EndDate)

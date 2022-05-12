@@ -47,42 +47,43 @@ and save to penny-vault database`,
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Info().
 			Strs("AssetTypes", viper.GetStringSlice("asset_types")).
+			Str("TickerDB", viper.GetString("parquet_file")).
 			Msg("loading tickers")
 
-		//backblaze.Download(viper.GetString("parquet_file"), viper.GetString("backblaze.bucket"))
+		backblaze.Download(viper.GetString("parquet_file"), viper.GetString("backblaze.bucket"))
 
 		// Fetch base list of assets
 		log.Info().Msg("fetching assets from polygon")
 		assets := polygon.FetchAssets(viper.GetStringSlice("asset_types"), 25)
 
-		// merge with asset database
-		log.Info().Msg("reading existing assets and merging with those downloaded from polygon")
-		assets = common.MergeWithCurrent(assets)
-
-		// Enrich with call to Polygon Asset Details
-		log.Info().Msg("fetching asset details from polygon")
-		polygon.EnrichDetail(assets, 5)
-
 		// Fetch MutualFund tickers from tiingo
 		assets = tiingo.GetMutualFundTickers(assets)
 
+		// merge with asset database
+		log.Info().Msg("reading existing assets and merging with those downloaded from polygon")
+		mergedAssets := common.MergeWithCurrent(assets)
+
+		// Enrich with call to Polygon Asset Details
+		log.Info().Msg("fetching asset details from polygon")
+		polygon.EnrichDetail(mergedAssets, 5)
+
 		// Search for FIGI's when the field is blank
 		log.Info().Msg("fetching missing figi's")
-		figi.Enrich(assets)
+		figi.Enrich(mergedAssets)
 
 		// cleanup assets
-		assets = common.CleanAssets(assets)
+		mergedAssets = common.CleanAssets(mergedAssets)
 
 		// Enrich with call to Yahoo Finance
 		log.Info().Msg("fetching data from yahoo!")
-		yfinance.Enrich(assets, 5)
+		yfinance.Enrich(mergedAssets, 5)
 
 		if viper.GetString("parquet_file") != "" {
-			common.SaveToParquet(assets, viper.GetString("parquet_file"))
+			common.SaveToParquet(mergedAssets, viper.GetString("parquet_file"))
 		}
 
 		if viper.GetString("database.url") != "" {
-			common.SaveToDatabase(assets, viper.GetString("database.url"))
+			common.SaveToDatabase(mergedAssets, viper.GetString("database.url"))
 		}
 
 		backblaze.Upload(viper.GetString("parquet_file"), viper.GetString("backblaze.bucket"), ".")

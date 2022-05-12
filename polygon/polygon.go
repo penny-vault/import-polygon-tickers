@@ -224,6 +224,7 @@ func FetchAssets(assetTypes []string, maxPages int) []*common.Asset {
 						CompositeFigi:   asset.CompositeFigi,
 						ShareClassFigi:  asset.ShareClassFigi,
 						CIK:             asset.CIK,
+						Source:          "api.polygon.io",
 					}
 					switch asset.Type {
 					case "CS":
