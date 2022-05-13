@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"strings"
 	"time"
 
 	_ "image/jpeg"
@@ -29,6 +30,7 @@ const (
 	ETN         AssetType = "Exchange Traded Note"
 	Fund        AssetType = "Closed-End Fund"
 	MutualFund  AssetType = "Mutual Fund"
+	ADRC        AssetType = "American Depository Receipt Common"
 )
 
 type Asset struct {
@@ -53,7 +55,7 @@ type Asset struct {
 	SimilarTickers       []string  `json:"similar_tickers" parquet:"name=similar_tickers, type=MAP, convertedtype=LIST, valuetype=BYTE_ARRAY, valueconvertedtype=UTF8"`
 	PolygonDetailAge     int64     `json:"polygon_detail_age" parquet:"name=polygon_detail_age, type=INT64"`
 	LastUpdated          int64     `json:"last_updated" parquet:"name=last_update, type=INT64"`
-	Source               string
+	Source               string    `json:"source" parquet:"name=source, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 }
 
 type assetTmp struct {
@@ -77,6 +79,7 @@ type assetTmp struct {
 	SimilarTickers       []string `json:"similar_tickers" parquet:"name=similar_tickers, type=MAP, convertedtype=LIST, valuetype=BYTE_ARRAY, valueconvertedtype=UTF8"`
 	PolygonDetailAge     int64    `json:"polygon_detail_age" parquet:"name=polygon_detail_age, type=INT64"`
 	LastUpdated          int64    `json:"last_updated" parquet:"name=last_update, type=INT64"`
+	Source               string   `json:"source" parquet:"name=source, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 }
 
 func BuildAssetMap(assets []*Asset) map[string]*Asset {
@@ -97,9 +100,24 @@ func CleanAssets(assets []*Asset) []*Asset {
 	return clean
 }
 
+func TrimWhiteSpace(assets []*Asset) {
+	for _, asset := range assets {
+		asset.Name = strings.TrimSpace(asset.Name)
+		asset.Description = strings.TrimSpace(asset.Description)
+		asset.CIK = strings.TrimSpace(asset.CIK)
+		asset.CUSIP = strings.TrimSpace(asset.CUSIP)
+		asset.Industry = strings.TrimSpace(asset.Industry)
+		asset.Sector = strings.TrimSpace(asset.Sector)
+		asset.ISIN = strings.TrimSpace(asset.ISIN)
+	}
+}
+
 func MergeWithCurrent(assets []*Asset) []*Asset {
 	mergedAssets := make([]*Asset, 0, len(assets))
+
 	existingAssets := ReadFromParquet(viper.GetString("parquet_file"))
+	log.Info().Int("NumAssets", len(existingAssets)).Msg("read parquet")
+
 	assetMapTickerExisting := make(map[string]*Asset)
 	assetMapTickerNew := make(map[string]*Asset)
 
@@ -108,14 +126,23 @@ func MergeWithCurrent(assets []*Asset) []*Asset {
 		// remove delisted tickers
 		if asset.DelistingDate == "" {
 			assetMapTickerExisting[asset.Ticker] = asset
+		} else {
+			log.Info().Object("Asset", asset).Msg("retired asset")
 		}
 	}
+
 	for _, asset := range assets {
-		assetMapTickerNew[asset.Ticker] = asset
+		if asset.DelistingDate == "" {
+			assetMapTickerNew[asset.Ticker] = asset
+		}
 	}
 
-	// add all new assets
+	// enrich assets with existing database
+	totalNew := 0
 	for ii, asset := range assets {
+		if asset.DelistingDate != "" {
+			continue
+		}
 		// does the asset already exist?
 		if origAsset, ok := assetMapTickerExisting[asset.Ticker]; ok {
 			mergedAsset := MergeAsset(origAsset, asset)
@@ -124,16 +151,21 @@ func MergeWithCurrent(assets []*Asset) []*Asset {
 		} else {
 			// add new ticker to db
 			mergedAssets = append(mergedAssets, asset)
+			totalNew++
 			asset.LastUpdated = time.Now().Unix()
 		}
 	}
+
+	log.Info().Int("New", totalNew).Msg("merged assets")
 
 	// mark assets not in the assetMapTickerNew as delisted
 	for _, asset := range existingAssets {
 		if _, ok := assetMapTickerNew[asset.Ticker]; !ok {
 			log.Debug().Str("Ticker", asset.Ticker).Str("CompositeFigi", asset.CompositeFigi).Msg("asset de-listed")
-			asset.DelistingDate = time.Now().Format("2006-01-02")
-			asset.LastUpdated = time.Now().Unix()
+			if asset.DelistingDate == "" {
+				asset.DelistingDate = time.Now().Format("2006-01-02")
+				asset.LastUpdated = time.Now().Unix()
+			}
 			mergedAssets = append(mergedAssets, asset)
 		}
 	}
@@ -158,6 +190,10 @@ func MergeAsset(a *Asset, b *Asset) *Asset {
 			Str("a.AssetType", string(a.AssetType)).
 			Str("b.AssetType", string(b.AssetType)).
 			Msg("asset types changed for ticker - ignoring change")
+	}
+
+	if a.AssetType == "" && b.AssetType != "" {
+		a.AssetType = b.AssetType
 	}
 
 	if b.CIK != "" && a.CIK != b.CIK {
@@ -244,13 +280,14 @@ func MergeAsset(a *Asset, b *Asset) *Asset {
 }
 
 func ReadFromParquet(fn string) []*Asset {
+	log.Info().Str("FileName", fn).Msg("loading parquet file")
 	fr, err := local.NewLocalFileReader(fn)
 	if err != nil {
 		log.Error().Err(err).Msg("can't open file")
 		return nil
 	}
 
-	pr, err := reader.NewParquetReader(fr, new(Asset), 4)
+	pr, err := reader.NewParquetReader(fr, new(assetTmp), 4)
 	if err != nil {
 		log.Error().Err(err).Msg("can't create parquet reader")
 		return nil
@@ -318,6 +355,9 @@ func SaveToParquet(records []*Asset, fn string) error {
 	pw.CompressionType = parquet.CompressionCodec_GZIP
 
 	for _, r := range records {
+		if r.DelistingDate != "" {
+			continue
+		}
 		if err = pw.Write(r); err != nil {
 			log.Error().
 				Err(err).
@@ -361,8 +401,36 @@ func SaveToDatabase(assets []*Asset, dsn string) {
 		return
 	}
 	defer conn.Close(context.Background())
+	tx, err := conn.Begin(context.Background())
+	if err != nil {
+		log.Error().Err(err).Msg("could not begin transaction")
+		return
+	}
+
+	// set all assets as inactive; active assets will be reset in subsequent step
+	_, err = tx.Exec(context.Background(),
+		`UPDATE assets SET active=False`)
+	if err != nil {
+		log.Error().Err(err).Msg("failed setting assets as inactive")
+	}
+
+	// update known assets
 	for _, asset := range assets {
-		_, err := conn.Exec(context.Background(),
+		var listingDate *string = nil
+		if asset.ListingDate != "" {
+			listingDate = &asset.ListingDate
+		}
+		var delistingDate *string = nil
+		if asset.DelistingDate != "" {
+			delistingDate = &asset.DelistingDate
+		}
+
+		if asset.Source == "" {
+			log.Warn().Object("Asset", asset).Msg("asset source not set")
+			asset.Source = "api.polygon.io"
+		}
+
+		_, err := tx.Exec(context.Background(),
 			`INSERT INTO assets (
 				"ticker",
 				"asset_type",
@@ -442,15 +510,19 @@ func SaveToDatabase(assets []*Asset, dsn string) {
 			asset.Industry,
 			asset.IconUrl,
 			asset.SimilarTickers,
-			asset.ListingDate,
-			asset.DelistingDate,
-			asset.LastUpdated,
+			listingDate,
+			delistingDate,
+			time.Unix(asset.LastUpdated, 0),
 			asset.Source,
 		)
 		if err != nil {
-			log.Error().Err(err).Msg("error saving asset to database")
+			log.Error().Err(err).Object("Asset", asset).Msg("error saving asset to database")
+			tx.Rollback(context.Background())
+			return
 		}
 	}
+
+	tx.Commit(context.Background())
 }
 
 func (asset *Asset) MarshalZerologObject(e *zerolog.Event) {
@@ -471,6 +543,7 @@ func (asset *Asset) MarshalZerologObject(e *zerolog.Event) {
 	e.Str("IconUrl", asset.IconUrl)
 	e.Str("CorporateUrl", asset.CorporateUrl)
 	e.Str("HeadquartersLocation", asset.HeadquartersLocation)
+	e.Str("Source", asset.Source)
 	e.Int64("PolygonDetailAge", asset.PolygonDetailAge)
 	e.Int64("LastUpdate", asset.LastUpdated)
 }

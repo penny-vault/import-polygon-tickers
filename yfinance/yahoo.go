@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -147,7 +148,8 @@ func Enrich(assets []*common.Asset, max int) {
 // Download retrieves data for the list of assets from Yahoo! Finance
 func Download(asset *common.Asset) {
 	n := rand.Intn(len(kUrls))
-	url := fmt.Sprintf(kUrls[n], asset.Ticker)
+	ticker := strings.ReplaceAll(asset.Ticker, "/", "-")
+	url := fmt.Sprintf(kUrls[n], ticker)
 
 	subLog := log.With().Str("Url", url).Str("Source", "yfinance").Logger()
 

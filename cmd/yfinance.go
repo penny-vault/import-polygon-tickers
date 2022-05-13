@@ -40,8 +40,7 @@ var yfinanceCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
 			// Search for FIGI's when the field is blank
-			newAssets := []*common.Asset{}
-			assets := common.MergeWithCurrent(newAssets)
+			assets := common.ReadFromParquet(viper.GetString("parquet_file"))
 			log.Info().Int("NumAssets", len(assets)).Msg("fetching meta-data from yahoo")
 
 			currentTime := time.Now().Unix()

@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -128,7 +129,8 @@ func FetchAssetDetail(asset *common.Asset, limit *rate.Limiter) *common.Asset {
 
 	client := resty.New()
 
-	urlClean := fmt.Sprintf("https://api.polygon.io/v3/reference/tickers/%s?apiKey=", asset.Ticker)
+	ticker := strings.ReplaceAll(asset.Ticker, "/", ".")
+	urlClean := fmt.Sprintf("https://api.polygon.io/v3/reference/tickers/%s?apiKey=", ticker)
 	url := fmt.Sprintf("%s%s", urlClean, viper.GetString("polygon.token"))
 	subLog := log.With().Str("Url", urlClean).Str("Source", "polygon.io").Logger()
 
@@ -201,24 +203,23 @@ func FetchIcon(url string, limit *rate.Limiter) []byte {
 func FetchAssets(assetTypes []string, maxPages int) []*common.Asset {
 	limit := rateLimit()
 	assets := []*common.Asset{}
-	pageNum := 1
 	for _, assetType := range assetTypes {
 		url := fmt.Sprintf("https://api.polygon.io/v3/reference/tickers?type=%s&market=stocks&active=true&sort=ticker&order=asc&limit=1000", assetType)
-		subLog := log.With().Str("Url", url).Str("Source", "polygon.io").Logger()
-		pageCnt := 1
+		subLog := log.With().Str("Source", "polygon.io").Logger()
+		pageNum := 1
 		for {
-			if pageCnt > maxPages {
+			if pageNum > maxPages {
 				break
 			}
-			pageCnt++
 			limit.Wait(context.Background())
-			subLog.Info().Int("Page", pageNum).Msg("Loading page")
+			subLog.Info().Str("Url", url).Int("Page", pageNum).Msg("Loading page")
 			pageNum++
 			resp := fetchAssetPage(url)
 			if resp.Status == "OK" {
 				for _, asset := range resp.Results {
+					ticker := strings.ReplaceAll(asset.Ticker, ".", "/")
 					newAsset := &common.Asset{
-						Ticker:          asset.Ticker,
+						Ticker:          ticker,
 						Name:            asset.Name,
 						PrimaryExchange: asset.PrimaryExchange,
 						CompositeFigi:   asset.CompositeFigi,
@@ -233,8 +234,12 @@ func FetchAssets(assetTypes []string, maxPages int) []*common.Asset {
 						newAsset.AssetType = common.ETF
 					case "ETN":
 						newAsset.AssetType = common.ETN
-					case "Fund":
+					case "FUND":
 						newAsset.AssetType = common.Fund
+					case "ADRC":
+						newAsset.AssetType = common.ADRC
+					default:
+						log.Error().Str("PolygonAssetType", asset.Type).Str("Ticker", asset.Ticker).Msg("unknown asset type")
 					}
 					assets = append(assets, newAsset)
 				}

@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"io/ioutil"
+	"strings"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -30,10 +31,15 @@ func readZipFile(zf *zip.File) ([]byte, error) {
 	return ioutil.ReadAll(f)
 }
 
-func GetMutualFundTickers(assets []*common.Asset) []*common.Asset {
-	mutualFundAssets := FetchTickers()
+// AddTiingoAssets adds tickers downloaded from tiingo that do not currently exist in the list
+func AddTiingoAssets(assets []*common.Asset) []*common.Asset {
+	tiingoAssets := FetchTickers()
 	assetMapTicker := common.BuildAssetMap(assets)
-	for _, asset := range mutualFundAssets {
+	for _, asset := range tiingoAssets {
+		// skip everything but mutual funds
+		if asset.AssetType != common.MutualFund {
+			continue
+		}
 		if _, ok := assetMapTicker[asset.Ticker]; !ok {
 			assetMapTicker[asset.Ticker] = asset
 		}
@@ -95,29 +101,52 @@ func FetchTickers() []*common.Asset {
 		return []*common.Asset{}
 	}
 
+	validExchanges := []string{"AMEX", "BATS", "NASDAQ", "NMFQS", "NYSE", "NYSE ARCA", "NYSE MKT"}
 	commonAssets := make([]*common.Asset, 0, 25000)
 	for _, asset := range assets {
-		if asset.AssetType == "Mutual Fund" {
-			mutualFund := &common.Asset{
-				Ticker:          asset.Ticker,
-				AssetType:       common.MutualFund,
-				ListingDate:     asset.StartDate,
-				DelistingDate:   asset.EndDate,
-				PrimaryExchange: asset.Exchange,
-				Source:          "api.tiingo.com",
+		// remove assets on invalid exchanges
+		keep := false
+		for _, exchange := range validExchanges {
+			if asset.Exchange == exchange {
+				keep = true
 			}
-			if asset.EndDate != "" {
-				endDate, err := time.Parse("2006-01-02", asset.EndDate)
-				if err != nil {
-					log.Warn().Str("EndDate", asset.EndDate).Err(err).Msg("could not parse end date")
-				}
-				now := time.Now()
-				age := now.Sub(endDate)
-				if age < (time.Hour * 24 * 7) {
-					mutualFund.DelistingDate = ""
-				}
+		}
+		if !keep {
+			continue
+		}
+
+		asset.Ticker = strings.ReplaceAll(asset.Ticker, "-", "/")
+		myAsset := &common.Asset{
+			Ticker:          asset.Ticker,
+			ListingDate:     asset.StartDate,
+			DelistingDate:   asset.EndDate,
+			PrimaryExchange: asset.Exchange,
+			Source:          "api.tiingo.com",
+		}
+
+		switch asset.AssetType {
+		case "Stock":
+			myAsset.AssetType = common.CommonStock
+		case "ETF":
+			myAsset.AssetType = common.ETF
+		case "Mutual Fund":
+			myAsset.AssetType = common.MutualFund
+		}
+
+		if asset.EndDate != "" {
+			endDate, err := time.Parse("2006-01-02", asset.EndDate)
+			if err != nil {
+				log.Warn().Str("EndDate", asset.EndDate).Err(err).Msg("could not parse end date")
 			}
-			commonAssets = append(commonAssets, mutualFund)
+			now := time.Now()
+			age := now.Sub(endDate)
+			if age < (time.Hour * 24 * 7) {
+				myAsset.DelistingDate = ""
+			}
+		}
+
+		if myAsset.DelistingDate == "" {
+			commonAssets = append(commonAssets, myAsset)
 		}
 	}
 

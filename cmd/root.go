@@ -50,17 +50,17 @@ and save to penny-vault database`,
 			Str("TickerDB", viper.GetString("parquet_file")).
 			Msg("loading tickers")
 
-		backblaze.Download(viper.GetString("parquet_file"), viper.GetString("backblaze.bucket"))
+		//backblaze.Download(viper.GetString("parquet_file"), viper.GetString("backblaze.bucket"))
 
 		// Fetch base list of assets
 		log.Info().Msg("fetching assets from polygon")
 		assets := polygon.FetchAssets(viper.GetStringSlice("asset_types"), 25)
 
 		// Fetch MutualFund tickers from tiingo
-		assets = tiingo.GetMutualFundTickers(assets)
+		assets = tiingo.AddTiingoAssets(assets)
 
 		// merge with asset database
-		log.Info().Msg("reading existing assets and merging with those downloaded from polygon")
+		log.Info().Msg("reading existing assets and merging with those just downloaded")
 		mergedAssets := common.MergeWithCurrent(assets)
 
 		// Enrich with call to Polygon Asset Details
@@ -73,17 +73,18 @@ and save to penny-vault database`,
 
 		// cleanup assets
 		mergedAssets = common.CleanAssets(mergedAssets)
+		common.TrimWhiteSpace(mergedAssets)
 
 		// Enrich with call to Yahoo Finance
 		log.Info().Msg("fetching data from yahoo!")
 		yfinance.Enrich(mergedAssets, 5)
 
-		if viper.GetString("parquet_file") != "" {
-			common.SaveToParquet(mergedAssets, viper.GetString("parquet_file"))
-		}
-
 		if viper.GetString("database.url") != "" {
 			common.SaveToDatabase(mergedAssets, viper.GetString("database.url"))
+		}
+
+		if viper.GetString("parquet_file") != "" {
+			common.SaveToParquet(mergedAssets, viper.GetString("parquet_file"))
 		}
 
 		backblaze.Upload(viper.GetString("parquet_file"), viper.GetString("backblaze.bucket"), ".")
@@ -137,7 +138,7 @@ func init() {
 	// Local flags
 	rootCmd.Flags().IntVar(&maxPolygonDetail, "max-polygon-detail", 100, "maximum polygon detail to fetch")
 
-	rootCmd.Flags().StringArray("asset-types", []string{"CS", "ETF", "ETN", "FUND", "MF"}, "types of assets to download. { CS = Common Stock, ETF = Exchange Traded Funds, ETN = Exchange Traded Note, FUND = Closed-end fund, MF = Mutual Funds}")
+	rootCmd.Flags().StringArray("asset-types", []string{"CS", "ETF", "ETN", "FUND", "MF", "ADRC"}, "types of assets to download. { CS = Common Stock, ETF = Exchange Traded Funds, ETN = Exchange Traded Note, FUND = Closed-end fund, MF = Mutual Funds}")
 	viper.BindPFlag("asset_types", rootCmd.Flags().Lookup("asset-types"))
 
 	rootCmd.Flags().Duration("max-age", 24*7*time.Hour, "maximum number of days stocks end date may be set too and still included")
