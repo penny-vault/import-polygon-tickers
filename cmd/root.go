@@ -50,7 +50,7 @@ and save to penny-vault database`,
 			Str("TickerDB", viper.GetString("parquet_file")).
 			Msg("loading tickers")
 
-		//backblaze.Download(viper.GetString("parquet_file"), viper.GetString("backblaze.bucket"))
+		backblaze.Download(viper.GetString("parquet_file"), viper.GetString("backblaze.bucket"))
 
 		// Fetch base list of assets
 		log.Info().Msg("fetching assets from polygon")
