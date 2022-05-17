@@ -46,7 +46,6 @@ and save to penny-vault database`,
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Info().
-			Strs("AssetTypes", viper.GetStringSlice("asset_types")).
 			Str("TickerDB", viper.GetString("parquet_file")).
 			Msg("loading tickers")
 
@@ -54,7 +53,7 @@ and save to penny-vault database`,
 
 		// Fetch base list of assets
 		log.Info().Msg("fetching assets from polygon")
-		assets := polygon.FetchAssets(viper.GetStringSlice("asset_types"), 25)
+		assets := polygon.FetchAssets(25)
 
 		// Fetch MutualFund tickers from tiingo
 		assets = tiingo.AddTiingoAssets(assets)
@@ -137,9 +136,6 @@ func init() {
 
 	// Local flags
 	rootCmd.Flags().IntVar(&maxPolygonDetail, "max-polygon-detail", 100, "maximum polygon detail to fetch")
-
-	rootCmd.Flags().StringArray("asset-types", []string{"CS", "ETF", "ETN", "FUND", "MF", "ADRC"}, "types of assets to download. { CS = Common Stock, ETF = Exchange Traded Funds, ETN = Exchange Traded Note, FUND = Closed-end fund, MF = Mutual Funds}")
-	viper.BindPFlag("asset_types", rootCmd.Flags().Lookup("asset-types"))
 
 	rootCmd.Flags().Duration("max-age", 24*7*time.Hour, "maximum number of days stocks end date may be set too and still included")
 	viper.BindPFlag("max_age", rootCmd.Flags().Lookup("max-age"))

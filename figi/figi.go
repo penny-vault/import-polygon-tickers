@@ -77,7 +77,7 @@ func Enrich(assets []*common.Asset) {
 
 	emptyFigis := make([]*common.Asset, 0, 100)
 	for _, asset := range assets {
-		if asset.CompositeFigi == "" && asset.DelistingDate == "" {
+		if (asset.CompositeFigi == "" || asset.AssetType == common.UnknownAsset) && asset.DelistingDate == "" {
 			emptyFigis = append(emptyFigis, asset)
 		}
 	}
@@ -87,6 +87,41 @@ func Enrich(assets []*common.Asset) {
 		if assetFigi, ok := figiMap[asset.Ticker]; ok {
 			asset.CompositeFigi = assetFigi.CompositeFIGI
 			asset.ShareClassFigi = assetFigi.ShareClassFIGI
+
+			if asset.AssetType == common.UnknownAsset {
+				switch assetFigi.SecurityType2 {
+				case "Depositary Receipt":
+					asset.AssetType = common.ADRC
+				case "Common Stock":
+					asset.AssetType = common.CommonStock
+				case "Mutual Fund":
+					switch assetFigi.SecurityType {
+					case "ETP":
+						asset.AssetType = common.ETF
+					case "Open-End Fund":
+						asset.AssetType = common.OpenEndFund
+					case "Closed-End Fund":
+						asset.AssetType = common.ClosedEndFund
+					default:
+						log.Warn().
+							Str("SecurityType", assetFigi.SecurityType).
+							Str("SecurityType2", assetFigi.SecurityType2).
+							Str("Ticker", asset.Ticker).
+							Str("CompositeFigi", assetFigi.CompositeFIGI).
+							Msg("asset type is unknown and openfigi security type 2 is unknown")
+					}
+					asset.AssetType = common.OpenEndFund
+				case "":
+				default:
+					log.Warn().
+						Str("SecurityType", assetFigi.SecurityType).
+						Str("SecurityType2", assetFigi.SecurityType2).
+						Str("Ticker", asset.Ticker).
+						Str("CompositeFigi", assetFigi.CompositeFIGI).
+						Msg("asset type is unknown and openfigi security type is unknown")
+				}
+			}
+
 			asset.LastUpdated = time.Now().Unix()
 		}
 	}

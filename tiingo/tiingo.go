@@ -37,7 +37,7 @@ func AddTiingoAssets(assets []*common.Asset) []*common.Asset {
 	assetMapTicker := common.BuildAssetMap(assets)
 	for _, asset := range tiingoAssets {
 		// skip everything but mutual funds
-		if asset.AssetType != common.MutualFund {
+		if asset.AssetType != common.OpenEndFund {
 			continue
 		}
 		if _, ok := assetMapTicker[asset.Ticker]; !ok {
@@ -130,7 +130,7 @@ func FetchTickers() []*common.Asset {
 		case "ETF":
 			myAsset.AssetType = common.ETF
 		case "Mutual Fund":
-			myAsset.AssetType = common.MutualFund
+			myAsset.AssetType = common.OpenEndFund
 		}
 
 		if asset.EndDate != "" {

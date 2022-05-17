@@ -25,12 +25,13 @@ import (
 type AssetType string
 
 const (
-	CommonStock AssetType = "Common Stock"
-	ETF         AssetType = "Exchange Traded Fund"
-	ETN         AssetType = "Exchange Traded Note"
-	Fund        AssetType = "Closed-End Fund"
-	MutualFund  AssetType = "Mutual Fund"
-	ADRC        AssetType = "American Depository Receipt Common"
+	CommonStock   AssetType = "Common Stock"
+	ETF           AssetType = "Exchange Traded Fund"
+	ETN           AssetType = "Exchange Traded Note"
+	ClosedEndFund AssetType = "Closed-End Fund"
+	OpenEndFund   AssetType = "Mutual Fund"
+	ADRC          AssetType = "American Depository Receipt Common"
+	UnknownAsset  AssetType = "Unknown"
 )
 
 type Asset struct {
@@ -95,7 +96,7 @@ func BuildAssetMap(assets []*Asset) map[string]*Asset {
 func CleanAssets(assets []*Asset) []*Asset {
 	clean := make([]*Asset, 0, len(assets))
 	for _, asset := range assets {
-		if asset.CompositeFigi != "" {
+		if asset.CompositeFigi != "" && asset.AssetType != UnknownAsset {
 			clean = append(clean, asset)
 		}
 	}

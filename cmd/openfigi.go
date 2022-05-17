@@ -79,6 +79,8 @@ var openFigiCmd = &cobra.Command{
 				log.Info().
 					Str("Ticker", asset.Ticker).
 					Str("Name", assetFigi.Name).
+					Str("SecurityType", assetFigi.SecurityType).
+					Str("SecurityType2", assetFigi.SecurityType2).
 					Str("Description", assetFigi.SecurityDescription).
 					Str("CompositeFigi", assetFigi.CompositeFIGI).
 					Str("ShareClassFigi", assetFigi.ShareClassFIGI).

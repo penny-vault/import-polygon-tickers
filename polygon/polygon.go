@@ -113,7 +113,7 @@ func EnrichDetail(assets []*common.Asset, max int) {
 	for _, asset := range assets {
 		bar.Add(1)
 		count++
-		if asset.AssetType != common.MutualFund && (asset.PolygonDetailAge+maxPolygonDetailAge) < now {
+		if asset.AssetType != common.OpenEndFund && (asset.PolygonDetailAge+maxPolygonDetailAge) < now {
 			FetchAssetDetail(asset, polygonRateLimiter)
 			asset.PolygonDetailAge = now
 		}
@@ -200,56 +200,57 @@ func FetchIcon(url string, limit *rate.Limiter) []byte {
 	return body
 }
 
-func FetchAssets(assetTypes []string, maxPages int) []*common.Asset {
+func FetchAssets(maxPages int) []*common.Asset {
 	limit := rateLimit()
 	assets := []*common.Asset{}
-	for _, assetType := range assetTypes {
-		url := fmt.Sprintf("https://api.polygon.io/v3/reference/tickers?type=%s&market=stocks&active=true&sort=ticker&order=asc&limit=1000", assetType)
-		subLog := log.With().Str("Source", "polygon.io").Logger()
-		pageNum := 1
-		for {
-			if pageNum > maxPages {
+	url := "https://api.polygon.io/v3/reference/tickers?market=stocks&active=true&sort=ticker&order=asc&limit=1000"
+	subLog := log.With().Str("Source", "polygon.io").Logger()
+	pageNum := 1
+	for {
+		if pageNum > maxPages {
+			break
+		}
+		limit.Wait(context.Background())
+		subLog.Info().Str("Url", url).Int("Page", pageNum).Msg("Loading page")
+		pageNum++
+		resp := fetchAssetPage(url)
+		if resp.Status == "OK" {
+			for _, asset := range resp.Results {
+				ticker := strings.ReplaceAll(asset.Ticker, ".", "/")
+				newAsset := &common.Asset{
+					Ticker:          ticker,
+					Name:            asset.Name,
+					PrimaryExchange: asset.PrimaryExchange,
+					CompositeFigi:   asset.CompositeFigi,
+					ShareClassFigi:  asset.ShareClassFigi,
+					CIK:             asset.CIK,
+					Source:          "api.polygon.io",
+				}
+				switch asset.Type {
+				case "CS":
+					newAsset.AssetType = common.CommonStock
+				case "ETF":
+					newAsset.AssetType = common.ETF
+				case "ETN":
+					newAsset.AssetType = common.ETN
+				case "FUND":
+					newAsset.AssetType = common.ClosedEndFund
+				case "ADRC":
+					newAsset.AssetType = common.ADRC
+				case "":
+					newAsset.AssetType = common.UnknownAsset
+				default:
+					// this is an asset type we aren't following - discard
+					continue
+				}
+				assets = append(assets, newAsset)
+			}
+			if resp.NextUrl == "" {
 				break
 			}
-			limit.Wait(context.Background())
-			subLog.Info().Str("Url", url).Int("Page", pageNum).Msg("Loading page")
-			pageNum++
-			resp := fetchAssetPage(url)
-			if resp.Status == "OK" {
-				for _, asset := range resp.Results {
-					ticker := strings.ReplaceAll(asset.Ticker, ".", "/")
-					newAsset := &common.Asset{
-						Ticker:          ticker,
-						Name:            asset.Name,
-						PrimaryExchange: asset.PrimaryExchange,
-						CompositeFigi:   asset.CompositeFigi,
-						ShareClassFigi:  asset.ShareClassFigi,
-						CIK:             asset.CIK,
-						Source:          "api.polygon.io",
-					}
-					switch asset.Type {
-					case "CS":
-						newAsset.AssetType = common.CommonStock
-					case "ETF":
-						newAsset.AssetType = common.ETF
-					case "ETN":
-						newAsset.AssetType = common.ETN
-					case "FUND":
-						newAsset.AssetType = common.Fund
-					case "ADRC":
-						newAsset.AssetType = common.ADRC
-					default:
-						log.Error().Str("PolygonAssetType", asset.Type).Str("Ticker", asset.Ticker).Msg("unknown asset type")
-					}
-					assets = append(assets, newAsset)
-				}
-				if resp.NextUrl == "" {
-					break
-				}
-				url = resp.NextUrl
-			} else {
-				break
-			}
+			url = resp.NextUrl
+		} else {
+			break
 		}
 	}
 	return assets
