@@ -90,6 +90,8 @@ func Enrich(assets []*common.Asset) {
 
 			if asset.AssetType == common.UnknownAsset {
 				switch assetFigi.SecurityType2 {
+				case "Partnership Shares":
+					asset.AssetType = common.CommonStock
 				case "Depositary Receipt":
 					asset.AssetType = common.ADRC
 				case "Common Stock":
