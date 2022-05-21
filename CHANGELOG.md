@@ -6,15 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0] - 2022-05-17
+## [0.1.0] - 2022-05-20
 ### Added
 - Integration with polygon.io for pulling actively traded assets
 - Integration with Tiingo for pulling Mutual Fund assets
 - Integration with OpenFigi for enricing assets with a Composite FIGI
-- Integration with Yahoo! Finance for fetching industry, sector, name and 
+- Integration with Yahoo! Finance for fetching industry, sector, name and
   description of Assets
 - Update database `assets` table with collected asset information
 - Save asset info to parquet and upload to backblaze
+- Docker build
 
 ### Changed
 
