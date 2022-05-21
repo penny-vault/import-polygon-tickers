@@ -1,6 +1,6 @@
 FROM golang:alpine AS builder
 WORKDIR /go/src
-RUN git clone https://github.com/magefile/mage && cd mage && go run bootstrap.go
+RUN apk add git && git clone https://github.com/magefile/mage && cd mage && go run bootstrap.go
 COPY ./ .
 RUN mage -v build
 
