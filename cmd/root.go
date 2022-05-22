@@ -53,7 +53,11 @@ and save to penny-vault database`,
 
 		// Fetch base list of assets
 		log.Info().Msg("fetching assets from polygon")
-		assets := polygon.FetchAssets(25)
+		assets, err := polygon.FetchAssets(25)
+		if err != nil {
+			log.Error().Msg("exiting due to error downloading polygon assets")
+			os.Exit(1)
+		}
 
 		// Fetch MutualFund tickers from tiingo
 		assets = tiingo.AddTiingoAssets(assets)

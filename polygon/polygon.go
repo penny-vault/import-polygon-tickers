@@ -18,6 +18,7 @@ package polygon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -200,7 +201,7 @@ func FetchIcon(url string, limit *rate.Limiter) []byte {
 	return body
 }
 
-func FetchAssets(maxPages int) []*common.Asset {
+func FetchAssets(maxPages int) ([]*common.Asset, error) {
 	limit := rateLimit()
 	assets := []*common.Asset{}
 	url := "https://api.polygon.io/v3/reference/tickers?market=stocks&active=true&sort=ticker&order=asc&limit=1000"
@@ -213,7 +214,10 @@ func FetchAssets(maxPages int) []*common.Asset {
 		limit.Wait(context.Background())
 		subLog.Info().Str("Url", url).Int("Page", pageNum).Msg("Loading page")
 		pageNum++
-		resp := fetchAssetPage(url)
+		resp, err := fetchAssetPage(url)
+		if err != nil {
+			return []*common.Asset{}, err
+		}
 		if resp.Status == "OK" {
 			for _, asset := range resp.Results {
 				ticker := strings.ReplaceAll(asset.Ticker, ".", "/")
@@ -250,13 +254,14 @@ func FetchAssets(maxPages int) []*common.Asset {
 			}
 			url = resp.NextUrl
 		} else {
-			break
+			log.Error().Str("Status", resp.Status).Str("RequestId", resp.RequestId).Int("Count", resp.Count).Str("NextUrl", resp.NextUrl).Msg("breaking due to error in polygon response")
+			return assets, errors.New("invalid response received")
 		}
 	}
-	return assets
+	return assets, nil
 }
 
-func fetchAssetPage(url string) PolygonAssetsResponse {
+func fetchAssetPage(url string) (PolygonAssetsResponse, error) {
 	// add url to log BEFORE the apikey is added in order not to expose a secret
 	subLog := log.With().Str("Url", url).Str("Source", "polygon.io").Logger()
 	// add apiKey
@@ -271,7 +276,7 @@ func fetchAssetPage(url string) PolygonAssetsResponse {
 
 	if err != nil {
 		subLog.Error().Err(err).Msg("error when fetching list of assets")
-		return assetsResponse
+		return assetsResponse, err
 	}
 
 	if resp.StatusCode() >= 400 {
@@ -281,18 +286,18 @@ func fetchAssetPage(url string) PolygonAssetsResponse {
 	body := resp.Body()
 	if err != nil {
 		subLog.Error().Stack().Err(err).Msg("could not read response body when fetching assets")
-		return assetsResponse
+		return assetsResponse, err
 	}
 
 	if err := json.Unmarshal(body, &assetsResponse); err != nil {
 		subLog.Error().Stack().Err(err).Msg("could not unmarshal response body when fetching assets")
-		return assetsResponse
+		return assetsResponse, err
 	}
 
 	if assetsResponse.Status != "OK" {
 		subLog.Error().Str("PolygonStatus", assetsResponse.Status).Err(err).Msg("polygon status code not OK")
-		return assetsResponse
+		return assetsResponse, fmt.Errorf("polygon status not OK")
 	}
 
-	return assetsResponse
+	return assetsResponse, nil
 }
