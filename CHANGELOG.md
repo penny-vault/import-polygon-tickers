@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.2.0] - 2022-05-22
 ### Added
 - Improved error handling when Polygon.io fails; job exits which is
   preferable to writing garbage to the assets database
@@ -12,7 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 ### Removed
-
 
 ## [0.1.0] - 2022-05-20
 ### Added
@@ -26,5 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-[Unreleased]: https://github.com/penny-vault/import-tickers/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/penny-vault/import-tickers/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/penny-vault/import-tickers/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/penny-vault/import-tickers/releases/tag/v0.0.1
