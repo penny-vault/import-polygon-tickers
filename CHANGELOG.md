@@ -8,18 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2022-05-20
 ### Added
-- Integration with polygon.io for pulling actively traded assets
-- Integration with Tiingo for pulling Mutual Fund assets
-- Integration with OpenFigi for enricing assets with a Composite FIGI
-- Integration with Yahoo! Finance for fetching industry, sector, name and
-  description of Assets
-- Update database `assets` table with collected asset information
-- Save asset info to parquet and upload to backblaze
-- Docker build
+- Download stocks and etf's from Polygon
+- Download mutual funds from Tiingo
+- Enrich assets with Industry/Sector from yFinance!
+- Encrich assets with Composite FIGI from Openfigi mapping API
+- Save changed assets to database and backblaze
 
 ### Changed
 
 ### Removed
 
 [Unreleased]: https://github.com/penny-vault/import-tickers/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/olivierlacan/keep-a-changelog/compare/v0.3.0...v1.0.0
+[0.1.0]: https://github.com/penny-vault/import-tickers/releases/tag/v0.0.1
