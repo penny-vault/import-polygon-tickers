@@ -161,8 +161,8 @@ func initConfig() {
 		cobra.CheckErr(err)
 
 		// Search config in home directory with name ".import-tickers" (without extension).
-		viper.AddConfigPath("/etc/import-polygon/") // path to look for the config file in
-		viper.AddConfigPath(fmt.Sprintf("%s/.import-tickers", home))
+		viper.AddConfigPath("/etc/") // path to look for the config file in
+		viper.AddConfigPath(fmt.Sprintf("%s/.config", home))
 		viper.AddConfigPath(".")
 		viper.SetConfigType("toml")
 		viper.SetConfigName("import-tickers")
