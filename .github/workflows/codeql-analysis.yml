@@ -58,7 +58,7 @@ jobs:
         go-version-file: 'go.mod'
     
     - name: Build Package
-      uses: magefile/mage-action@v1
+      uses: magefile/mage-action@v2
       with:
         version: latest
         args: build
