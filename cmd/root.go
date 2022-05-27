@@ -83,7 +83,7 @@ and save to penny-vault database`,
 		yfinance.Enrich(mergedAssets, 5)
 
 		if viper.GetString("database.url") != "" {
-			common.SaveToDatabase(mergedAssets, viper.GetString("database.url"))
+			common.SaveToDatabase(mergedAssets)
 		}
 
 		if viper.GetString("parquet_file") != "" {
