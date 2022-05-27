@@ -397,7 +397,7 @@ func SaveIcons(assets []*Asset, dirpath string) {
 	}
 }
 
-func SaveToDatabase(assets []*Asset, dsn string) {
+func SaveToDatabase(assets []*Asset) {
 	log.Info().Msg("saving to database")
 	conn, err := pgx.Connect(context.Background(), viper.GetString("database.url"))
 	if err != nil {
