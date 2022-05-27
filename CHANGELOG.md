@@ -6,14 +6,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
 ## [0.2.0] - 2022-05-22
 ### Added
 - Improved error handling when Polygon.io fails; job exits which is
   preferable to writing garbage to the assets database
-
-### Changed
-
-### Removed
 
 ## [0.1.0] - 2022-05-20
 ### Added
@@ -22,10 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enrich assets with Industry/Sector from yFinance!
 - Encrich assets with Composite FIGI from Openfigi mapping API
 - Save changed assets to database and backblaze
-
-### Changed
-
-### Removed
 
 [Unreleased]: https://github.com/penny-vault/import-tickers/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/penny-vault/import-tickers/compare/v0.1.0...v0.2.0
