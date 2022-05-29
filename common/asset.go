@@ -119,6 +119,17 @@ func TrimWhiteSpace(assets []*Asset) {
 	}
 }
 
+// FilterMixedCase removes assets that have mixed-case tickers
+func FilterMixedCase(assets []*Asset) []*Asset {
+	newAssets := make([]*Asset, 0, len(assets))
+	for _, asset := range assets {
+		if strings.ToUpper(asset.Ticker) == asset.Ticker {
+			newAssets = append(newAssets, asset)
+		}
+	}
+	return newAssets
+}
+
 func MergeWithCurrent(assets []*Asset) []*Asset {
 	mergedAssets := make([]*Asset, 0, len(assets))
 

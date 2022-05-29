@@ -82,6 +82,12 @@ and save to penny-vault database`,
 		log.Info().Msg("fetching data from yahoo!")
 		yfinance.Enrich(mergedAssets, 5)
 
+		// Prune multi-case assets
+		beforeFilterCnt := len(mergedAssets)
+		mergedAssets = common.FilterMixedCase(mergedAssets)
+		afterFilterCnt := len(mergedAssets)
+		log.Debug().Int("RemovedAssetsCount", beforeFilterCnt-afterFilterCnt).Msg("filtered assets with mixed-case tickers")
+
 		if viper.GetString("database.url") != "" {
 			common.SaveToDatabase(mergedAssets)
 		}
