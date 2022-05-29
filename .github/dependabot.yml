@@ -5,3 +5,8 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+  # Update application dependencies
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "daily"
