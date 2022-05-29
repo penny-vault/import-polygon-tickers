@@ -56,8 +56,10 @@ type Asset struct {
 	SimilarTickers       []string  `json:"similar_tickers" parquet:"name=similar_tickers, type=MAP, convertedtype=LIST, valuetype=BYTE_ARRAY, valueconvertedtype=UTF8"`
 	PolygonDetailAge     int64     `json:"polygon_detail_age" parquet:"name=polygon_detail_age, type=INT64"`
 	FidelityCusip        bool      `parquet:"name=fidelity_cusip, type=BOOLEAN"`
-	LastUpdated          int64     `json:"last_updated" parquet:"name=last_update, type=INT64"`
-	Source               string    `json:"source" parquet:"name=source, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+
+	Updated     bool
+	LastUpdated int64  `json:"last_updated" parquet:"name=last_update, type=INT64"`
+	Source      string `json:"source" parquet:"name=source, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 }
 
 type assetTmp struct {
@@ -81,8 +83,10 @@ type assetTmp struct {
 	SimilarTickers       []string `json:"similar_tickers" parquet:"name=similar_tickers, type=MAP, convertedtype=LIST, valuetype=BYTE_ARRAY, valueconvertedtype=UTF8"`
 	PolygonDetailAge     int64    `json:"polygon_detail_age" parquet:"name=polygon_detail_age, type=INT64"`
 	FidelityCusip        bool     `parquet:"name=fidelity_cusip, type=BOOLEAN"`
-	LastUpdated          int64    `json:"last_updated" parquet:"name=last_update, type=INT64"`
-	Source               string   `json:"source" parquet:"name=source, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+
+	Updated     bool
+	LastUpdated int64  `json:"last_updated" parquet:"name=last_update, type=INT64"`
+	Source      string `json:"source" parquet:"name=source, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 }
 
 func BuildAssetMap(assets []*Asset) map[string]*Asset {
@@ -201,81 +205,97 @@ func MergeAsset(a *Asset, b *Asset) *Asset {
 
 	if b.CIK != "" && a.CIK != b.CIK {
 		a.CIK = b.CIK
+		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.CUSIP != "" && a.CUSIP != b.CUSIP {
 		a.CUSIP = b.CUSIP
+		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.CompositeFigi != "" && a.CompositeFigi != b.CompositeFigi {
 		a.CompositeFigi = b.CompositeFigi
+		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.CorporateUrl != "" && a.CorporateUrl != b.CorporateUrl {
 		a.CorporateUrl = b.CorporateUrl
+		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.DelistingDate != "" && a.DelistingDate != b.DelistingDate {
 		a.DelistingDate = b.DelistingDate
+		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.Description != "" && a.Description != b.Description {
 		a.Description = b.Description
+		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.HeadquartersLocation != "" && a.HeadquartersLocation != b.HeadquartersLocation {
 		a.HeadquartersLocation = b.HeadquartersLocation
+		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.ISIN != "" && a.ISIN != b.ISIN {
 		a.ISIN = b.ISIN
+		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.IconUrl != "" && a.IconUrl != b.IconUrl {
 		a.IconUrl = b.IconUrl
+		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.Industry != "" && a.Industry != b.Industry {
 		a.Industry = b.Industry
+		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.ListingDate != "" && a.ListingDate != b.ListingDate {
 		a.ListingDate = b.ListingDate
+		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.Name != "" && a.Name != b.Name {
 		a.Name = b.Name
+		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.PrimaryExchange != "" && a.PrimaryExchange != b.PrimaryExchange {
 		a.PrimaryExchange = b.PrimaryExchange
+		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.Sector != "" && a.Sector != b.Sector {
 		a.Sector = b.Sector
+		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.ShareClassFigi != "" && a.ShareClassFigi != b.ShareClassFigi {
 		a.ShareClassFigi = b.ShareClassFigi
+		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if a.Source != b.Source {
 		a.Source = b.Source
+		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
@@ -411,9 +431,9 @@ func SaveToDatabase(assets []*Asset) {
 		return
 	}
 
-	// set all assets as inactive; active assets will be reset in subsequent step
+	// reset active, new, and updated flags
 	_, err = tx.Exec(context.Background(),
-		`UPDATE assets SET active=False`)
+		`UPDATE assets SET active=False, updated=False, new=False`)
 	if err != nil {
 		log.Error().Err(err).Msg("failed setting assets as inactive")
 	}
@@ -452,6 +472,8 @@ func SaveToDatabase(assets []*Asset) {
 				"industry",
 				"logo_url",
 				"similar_tickers",
+				"new",
+				"updated",
 				"listed_utc",
 				"delisted_utc",
 				"last_updated_utc",
@@ -473,10 +495,12 @@ func SaveToDatabase(assets []*Asset) {
 				$14,
 				$15,
 				$16,
+				't',
 				$17,
 				$18,
 				$19,
-				$20
+				$20,
+				$21
 			) ON CONFLICT ON CONSTRAINT assets_pkey
 			DO UPDATE SET
 				cik = EXCLUDED.cik,
@@ -493,6 +517,7 @@ func SaveToDatabase(assets []*Asset) {
 				industry = EXCLUDED.industry,
 				logo_url = EXCLUDED.logo_url,
 				similar_tickers = EXCLUDED.similar_tickers,
+				updated = EXCLUDED.updated,
 				listed_utc = EXCLUDED.listed_utc,
 				delisted_utc = EXCLUDED.delisted_utc,
 				last_updated_utc = EXCLUDED.last_updated_utc,
@@ -514,6 +539,7 @@ func SaveToDatabase(assets []*Asset) {
 			asset.Industry,
 			asset.IconUrl,
 			asset.SimilarTickers,
+			asset.Updated,
 			listingDate,
 			delistingDate,
 			time.Unix(asset.LastUpdated, 0),
