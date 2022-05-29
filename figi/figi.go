@@ -101,9 +101,9 @@ func Enrich(assets []*common.Asset) {
 					case "ETP":
 						asset.AssetType = common.ETF
 					case "Open-End Fund":
-						asset.AssetType = common.OpenEndFund
+						asset.AssetType = common.MutualFund
 					case "Closed-End Fund":
-						asset.AssetType = common.ClosedEndFund
+						asset.AssetType = common.CEF
 					default:
 						log.Warn().
 							Str("SecurityType", assetFigi.SecurityType).
@@ -112,7 +112,7 @@ func Enrich(assets []*common.Asset) {
 							Str("CompositeFigi", assetFigi.CompositeFIGI).
 							Msg("asset type is unknown and openfigi security type 2 is unknown")
 					}
-					asset.AssetType = common.OpenEndFund
+					asset.AssetType = common.MutualFund
 				case "":
 				default:
 					log.Warn().

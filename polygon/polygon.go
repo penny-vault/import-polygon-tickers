@@ -114,7 +114,7 @@ func EnrichDetail(assets []*common.Asset, max int) {
 	for _, asset := range assets {
 		bar.Add(1)
 		count++
-		if asset.AssetType != common.OpenEndFund && (asset.PolygonDetailAge+maxPolygonDetailAge) < now {
+		if asset.AssetType != common.MutualFund && asset.AssetType != common.EconomicIndicator && (asset.PolygonDetailAge+maxPolygonDetailAge) < now {
 			FetchAssetDetail(asset, polygonRateLimiter)
 			asset.PolygonDetailAge = now
 		}
@@ -238,7 +238,7 @@ func FetchAssets(maxPages int) ([]*common.Asset, error) {
 				case "ETN":
 					newAsset.AssetType = common.ETN
 				case "FUND":
-					newAsset.AssetType = common.ClosedEndFund
+					newAsset.AssetType = common.CEF
 				case "ADRC":
 					newAsset.AssetType = common.ADRC
 				case "":

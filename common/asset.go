@@ -25,13 +25,14 @@ import (
 type AssetType string
 
 const (
-	CommonStock   AssetType = "Common Stock"
-	ETF           AssetType = "Exchange Traded Fund"
-	ETN           AssetType = "Exchange Traded Note"
-	ClosedEndFund AssetType = "Closed-End Fund"
-	OpenEndFund   AssetType = "Mutual Fund"
-	ADRC          AssetType = "American Depository Receipt Common"
-	UnknownAsset  AssetType = "Unknown"
+	CommonStock       AssetType = "Common Stock"
+	ETF               AssetType = "Exchange Traded Fund"
+	ETN               AssetType = "Exchange Traded Note"
+	CEF               AssetType = "Closed-End Fund"
+	MutualFund        AssetType = "Mutual Fund"
+	ADRC              AssetType = "American Depository Receipt Common"
+	EconomicIndicator AssetType = "Economic Indicator"
+	UnknownAsset      AssetType = "Unknown"
 )
 
 type Asset struct {
@@ -133,7 +134,7 @@ func FilterMixedCase(assets []*Asset) []*Asset {
 func MergeWithCurrent(assets []*Asset) []*Asset {
 	mergedAssets := make([]*Asset, 0, len(assets))
 
-	existingAssets := ReadFromParquet(viper.GetString("parquet_file"))
+	existingAssets := ReadAssetsFromParquet(viper.GetString("parquet_file"))
 	log.Info().Int("NumAssets", len(existingAssets)).Msg("read parquet")
 
 	assetMapTickerExisting := make(map[string]*Asset)
@@ -313,7 +314,7 @@ func MergeAsset(a *Asset, b *Asset) *Asset {
 	return a
 }
 
-func ReadFromParquet(fn string) []*Asset {
+func ReadAssetsFromParquet(fn string) []*Asset {
 	log.Info().Str("FileName", fn).Msg("loading parquet file")
 	fr, err := local.NewLocalFileReader(fn)
 	if err != nil {
