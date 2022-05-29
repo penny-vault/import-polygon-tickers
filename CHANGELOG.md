@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - Skip assets that have mixed case tickers
+- Mark changed assets as updated
+- Flag new assets as new additions
 
 ### Changed
 
