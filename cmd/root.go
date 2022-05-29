@@ -42,8 +42,6 @@ var rootCmd = &cobra.Command{
 	Short: "Download tradeable assets from polygon, tiingo, and Yahoo! finance",
 	Long: `Download tradeable assets from polygon, tiingo, and Yahoo!
 and save to penny-vault database`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Info().
 			Str("TickerDB", viper.GetString("parquet_file")).
