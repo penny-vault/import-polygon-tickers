@@ -7,10 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - Skip assets that have mixed case tickers
-- Mark changed assets as updated
-- Flag new assets as new additions
+- Flag assets as `new` and `updated` to ease statistics tracking
+- Option to load additional assets from a specified TOML file
+- Add kill switch if counts from 3rd party services don't match expectations or if too many assets would be removed at once
 
 ### Changed
+- Improved debug logs
 
 ### Deprecated
 
