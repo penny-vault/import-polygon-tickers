@@ -27,14 +27,14 @@ import (
 type AssetType string
 
 const (
-	CommonStock       AssetType = "Common Stock"
-	ETF               AssetType = "Exchange Traded Fund"
-	ETN               AssetType = "Exchange Traded Note"
-	CEF               AssetType = "Closed-End Fund"
-	MutualFund        AssetType = "Mutual Fund"
-	ADRC              AssetType = "American Depository Receipt Common"
-	EconomicIndicator AssetType = "Economic Indicator"
-	UnknownAsset      AssetType = "Unknown"
+	CommonStock  AssetType = "Common Stock"
+	ETF          AssetType = "Exchange Traded Fund"
+	ETN          AssetType = "Exchange Traded Note"
+	CEF          AssetType = "Closed-End Fund"
+	MutualFund   AssetType = "Mutual Fund"
+	ADRC         AssetType = "American Depository Receipt Common"
+	FRED         AssetType = "FRED"
+	UnknownAsset AssetType = "Unknown"
 )
 
 type tomlAssetContainer struct {

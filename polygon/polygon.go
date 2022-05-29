@@ -114,7 +114,7 @@ func EnrichDetail(assets []*common.Asset, max int) {
 	for _, asset := range assets {
 		bar.Add(1)
 		count++
-		if asset.AssetType != common.MutualFund && asset.AssetType != common.EconomicIndicator && (asset.PolygonDetailAge+maxPolygonDetailAge) < now {
+		if asset.AssetType != common.MutualFund && asset.AssetType != common.FRED && (asset.PolygonDetailAge+maxPolygonDetailAge) < now {
 			FetchAssetDetail(asset, polygonRateLimiter)
 			asset.PolygonDetailAge = now
 		}
