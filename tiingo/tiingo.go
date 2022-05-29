@@ -130,7 +130,7 @@ func FetchTickers() []*common.Asset {
 		case "ETF":
 			myAsset.AssetType = common.ETF
 		case "Mutual Fund":
-			myAsset.AssetType = common.OpenEndFund
+			myAsset.AssetType = common.MutualFund
 		}
 
 		if asset.EndDate != "" {

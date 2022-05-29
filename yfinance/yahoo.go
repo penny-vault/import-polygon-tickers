@@ -80,7 +80,7 @@ func NumAssetsNeedingUpdate(assets []*common.Asset) int {
 		if asset.DelistingDate == "" && asset.AssetType == common.CommonStock && (asset.Industry == "" || asset.Sector == "" || asset.Description == "") {
 			totalCount += 1
 		}
-		if asset.DelistingDate == "" && asset.AssetType == common.OpenEndFund && asset.Name == "" {
+		if asset.DelistingDate == "" && asset.AssetType == common.MutualFund && asset.Name == "" {
 			totalCount += 1
 		}
 		if asset.DelistingDate == "" && asset.AssetType == common.ETF && asset.Description == "" {
@@ -113,7 +113,7 @@ func Enrich(assets []*common.Asset, max int) {
 				count <- 1
 			}(asset)
 		}
-		if asset.DelistingDate == "" && asset.AssetType == common.OpenEndFund && asset.Name == "" {
+		if asset.DelistingDate == "" && asset.AssetType == common.MutualFund && asset.Name == "" {
 			bar.Add(1)
 			yahooRateLimiter.Wait(context.Background())
 			callCount += 1
