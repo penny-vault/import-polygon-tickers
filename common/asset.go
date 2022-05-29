@@ -134,7 +134,7 @@ func FilterMixedCase(assets []*Asset) []*Asset {
 func MergeWithCurrent(assets []*Asset) []*Asset {
 	mergedAssets := make([]*Asset, 0, len(assets))
 
-	existingAssets := ReadFromParquet(viper.GetString("parquet_file"))
+	existingAssets := ReadAssetsFromParquet(viper.GetString("parquet_file"))
 	log.Info().Int("NumAssets", len(existingAssets)).Msg("read parquet")
 
 	assetMapTickerExisting := make(map[string]*Asset)
