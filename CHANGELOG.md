@@ -6,13 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
-- Skip assets that have mixed case tickers
-- Flag assets as `new` and `updated` to ease statistics tracking
-- Option to load additional assets from a specified TOML file
-- Add kill switch if counts from 3rd party services don't match expectations or if too many assets would be removed at once
 
 ### Changed
-- Improved debug logs
 
 ### Deprecated
 
@@ -21,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 ### Security
+
+## [0.3.0] - 2022-05-28
+### Added
+- Skip assets that have mixed case tickers
+- Flag assets as `new` and `updated` to ease statistics tracking
+- Option to load additional assets from a specified TOML file
+- Add kill switch if counts from 3rd party services don't match expectations or if too many assets would be removed at once
+
+### Changed
+- Improved debug logs
 
 ## [0.2.0] - 2022-05-22
 ### Added
@@ -35,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Encrich assets with Composite FIGI from Openfigi mapping API
 - Save changed assets to database and backblaze
 
-[Unreleased]: https://github.com/penny-vault/import-tickers/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/penny-vault/import-tickers/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/penny-vault/import-tickers/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/penny-vault/import-tickers/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/penny-vault/import-tickers/releases/tag/v0.0.1
