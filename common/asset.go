@@ -90,6 +90,7 @@ type assetTmp struct {
 	Source      string `json:"source" parquet:"name=source, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 }
 
+// BuildAssetMap creates a map[string]*Asset hashmap where the ticker is the key
 func BuildAssetMap(assets []*Asset) map[string]*Asset {
 	assetMap := make(map[string]*Asset, len(assets))
 	for _, asset := range assets {
@@ -98,6 +99,7 @@ func BuildAssetMap(assets []*Asset) map[string]*Asset {
 	return assetMap
 }
 
+// CleanAssets remove assets that have no composite figi or have an unknown asset type
 func CleanAssets(assets []*Asset) []*Asset {
 	clean := make([]*Asset, 0, len(assets))
 	for _, asset := range assets {
@@ -108,6 +110,7 @@ func CleanAssets(assets []*Asset) []*Asset {
 	return clean
 }
 
+// TrimeWhiteSpace removes leading and trailing whitespace in selected fields of the asset
 func TrimWhiteSpace(assets []*Asset) {
 	for _, asset := range assets {
 		asset.Name = strings.TrimSpace(asset.Name)
