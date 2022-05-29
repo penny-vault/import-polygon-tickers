@@ -45,7 +45,14 @@ and save to penny-vault database`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
+		nyc, err := time.LoadLocation("America/New_York")
+		if err != nil {
+			log.Error().Err(err).Msg("could not load timezone")
+		}
+
 		log.Info().
+			Bool("SaveDB", viper.GetBool("database.save")).
+			Bool("Backbalze.SkipUpload", viper.GetBool("backblaze.skip_upload")).
 			Str("TickerDB", viper.GetString("parquet_file")).
 			Msg("loading tickers")
 
@@ -53,18 +60,66 @@ and save to penny-vault database`,
 
 		// Fetch base list of assets
 		log.Info().Msg("fetching assets from polygon")
-		assets, err := polygon.FetchAssets(25)
+		polygonAssets, err := polygon.FetchAssets(25)
 		if err != nil {
 			log.Error().Msg("exiting due to error downloading polygon assets")
 			os.Exit(1)
 		}
 
-		// Fetch MutualFund tickers from tiingo
-		assets = tiingo.AddTiingoAssets(assets)
+		if len(polygonAssets) < viper.GetInt("polygon.min_assets") {
+			log.Error().Int("NumAssets", len(polygonAssets)).Int("MinRequired", viper.GetInt("polygon.min_assets")).Msg("not enough polygon assets were downloaded - exiting")
+			os.Exit(429)
+		}
 
-		// merge with asset database
-		log.Info().Msg("reading existing assets and merging with those just downloaded")
-		mergedAssets := common.MergeWithCurrent(assets)
+		// Fetch MutualFund tickers from tiingo
+		tiingoAssets := tiingo.FetchAssets()
+
+		if len(tiingoAssets) < viper.GetInt("tiingo.min_assets") {
+			log.Error().Int("NumAssets", len(tiingoAssets)).Int("MinRequired", viper.GetInt("tiingo.min_assets")).Msg("not enough tiingo assets were downloaded - exiting")
+			os.Exit(429)
+		}
+
+		// Merge polygon and tiingo lists
+		mergedAssets, _, _ := common.MergeAssetList(polygonAssets, tiingoAssets)
+
+		log.Info().Int("Num", len(mergedAssets)).Msg("polygon + tiingo")
+
+		// Add tickers from file
+		staticAssetsFn := viper.GetString("static_assets_fn")
+		if staticAssetsFn != "" {
+			tomlAssets := common.ReadAssetsFromToml(staticAssetsFn)
+			log.Info().Int("Num", len(tomlAssets)).Str("FileName", staticAssetsFn).Msg("Read static assets from TOML file")
+			mergedAssets, _, _ = common.MergeAssetList(mergedAssets, tomlAssets)
+		}
+
+		// Load from parquet
+		parquetDb := viper.GetString("parquet_file")
+		if parquetDb != "" {
+			parquetAssets := common.ReadAssetsFromParquet(parquetDb)
+			log.Info().Int("NumAssets", len(parquetAssets)).Msg("read existing assets from parquet")
+
+			// remove delisted assets
+			parquetAssets = common.RemoveDelistedAssets(parquetAssets)
+
+			var first []*common.Asset
+			var second []*common.Asset
+			mergedAssets, first, second = common.MergeAssetList(parquetAssets, mergedAssets)
+
+			log.Info().Int("InParquetOnly", len(first)).Int("NewlyDownloaded", len(second)).Int("Total", len(mergedAssets)).Msg("merge with parquet")
+
+			// mark items only in first as delisted
+			for _, asset := range first {
+				asset.DelistingDate = time.Now().In(nyc).Format("2006-01-02")
+			}
+
+			// mark items only in second as updated and set listing date if it's empty
+			for _, asset := range second {
+				asset.LastUpdated = time.Now().In(nyc).Unix()
+				if asset.ListingDate == "" {
+					asset.ListingDate = time.Now().In(nyc).Format("2006-01-02")
+				}
+			}
+		}
 
 		// Enrich with call to Polygon Asset Details
 		log.Info().Msg("fetching asset details from polygon")
@@ -75,7 +130,10 @@ and save to penny-vault database`,
 		figi.Enrich(mergedAssets)
 
 		// cleanup assets
+		beforeCleanCnt := len(mergedAssets)
 		mergedAssets = common.CleanAssets(mergedAssets)
+		afterCleanCnt := len(mergedAssets)
+		log.Debug().Int("RemovedAssetCount", beforeCleanCnt-afterCleanCnt).Msg("Removed assets with no FIGI or Asset Type")
 		common.TrimWhiteSpace(mergedAssets)
 
 		// Enrich with call to Yahoo Finance
@@ -89,14 +147,52 @@ and save to penny-vault database`,
 		log.Debug().Int("RemovedAssetsCount", beforeFilterCnt-afterFilterCnt).Msg("filtered assets with mixed-case tickers")
 
 		if viper.GetString("database.url") != "" {
-			common.SaveToDatabase(mergedAssets)
+			// Compare against assets currently in DB to find what is getting removed
+			assetsDb := common.ActiveAssetsFromDatabase()
+			log.Info().Int("NumMergedAssets", len(mergedAssets)).Msg("merged assets")
+			removedAssets := common.SubtractAssets(assetsDb, mergedAssets)
+			log.Info().Int("NumAssetsRemoved", len(removedAssets)).Msg("found delisted assets")
+
+			// this is a safety valve to not delete assets because a
+			// service goes down
+			numRemoved := len(removedAssets)
+			for _, asset := range mergedAssets {
+				if asset.DelistingDate != "" {
+					numRemoved++
+				}
+			}
+			if numRemoved > viper.GetInt("max_removed_count") {
+				log.Error().Int("MaxAllowed", viper.GetInt("max_removed_count")).Int("Actual", numRemoved).Msg("too many assets removed - bailing")
+				// log every asset we intend to remove for debugging
+				for _, asset := range mergedAssets {
+					if asset.DelistingDate != "" {
+						log.Debug().Object("Asset", asset).Msg("asset marked for removal")
+					}
+				}
+				os.Exit(429)
+			}
+
+			// mark removed assets so statistics are correctly calculated
+			for _, asset := range removedAssets {
+				asset.DelistingDate = time.Now().In(nyc).Format("2006-01-02")
+				asset.LastUpdated = time.Now().In(nyc).Unix()
+				mergedAssets = append(mergedAssets, asset)
+			}
+
+			common.LogSummary(mergedAssets)
+
+			if viper.GetBool("database.save") {
+				common.SaveToDatabase(mergedAssets)
+			}
 		}
 
 		if viper.GetString("parquet_file") != "" {
 			common.SaveToParquet(mergedAssets, viper.GetString("parquet_file"))
 		}
 
-		backblaze.Upload(viper.GetString("parquet_file"), viper.GetString("backblaze.bucket"), ".")
+		if !viper.GetBool("backblaze.skip_upload") {
+			backblaze.Upload(viper.GetString("parquet_file"), viper.GetString("backblaze.bucket"), ".")
+		}
 	},
 }
 
@@ -120,17 +216,31 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is import-tickers.toml)")
 	rootCmd.PersistentFlags().Bool("log.json", false, "print logs as json to stderr")
 	viper.BindPFlag("log.json", rootCmd.PersistentFlags().Lookup("log.json"))
+
 	rootCmd.PersistentFlags().StringP("database-url", "d", "host=localhost port=5432", "DSN for database connection")
 	viper.BindPFlag("database.url", rootCmd.PersistentFlags().Lookup("database-url"))
+	rootCmd.PersistentFlags().Bool("database-save", false, "save assets to database")
+	viper.BindPFlag("database.save", rootCmd.PersistentFlags().Lookup("database-save"))
+
 	rootCmd.PersistentFlags().String("parquet-file", "tickers.parquet", "save results to parquet")
 	viper.BindPFlag("parquet_file", rootCmd.PersistentFlags().Lookup("parquet-file"))
 
+	rootCmd.PersistentFlags().Int("max-removed-count", 25, "maximum number of assets that can be removed per run; this is a safety feature in-case something goes wrong to prevent the database from getting hosed up")
+	viper.BindPFlag("max_removed_count", rootCmd.PersistentFlags().Lookup("max-removed-count"))
+
+	// static assets
+	rootCmd.PersistentFlags().String("static-assets-fn", "", "load additional assets from the specified TOML file")
+	viper.BindPFlag("static_assets_fn", rootCmd.PersistentFlags().Lookup("static-assets-fn"))
+
+	// backblaze
 	rootCmd.PersistentFlags().String("backblaze-application-id", "<not-set>", "backblaze application id")
 	viper.BindPFlag("backblaze.application_id", rootCmd.PersistentFlags().Lookup("backblaze-application-id"))
 	rootCmd.PersistentFlags().String("backblaze-application-key", "<not-set>", "backblaze application key")
 	viper.BindPFlag("backblaze.application_key", rootCmd.PersistentFlags().Lookup("backblaze-application-key"))
 	rootCmd.PersistentFlags().String("backblaze-bucket", "ticker-info", "backblaze bucket")
 	viper.BindPFlag("backblaze.bucket", rootCmd.PersistentFlags().Lookup("backblaze-bucket"))
+	rootCmd.PersistentFlags().Bool("backblaze-skip-upload", false, "skip backblaze upload")
+	viper.BindPFlag("backblaze.skip_upload", rootCmd.PersistentFlags().Lookup("backblaze-skip-upload"))
 
 	// polygon
 	rootCmd.PersistentFlags().String("polygon-token", "<not-set>", "polygon API key token")
@@ -139,6 +249,12 @@ func init() {
 	viper.BindPFlag("polygon.detail_age", rootCmd.PersistentFlags().Lookup("max-polygon-detail-age"))
 	rootCmd.PersistentFlags().Int("polygon-rate-limit", 4, "polygon rate limit (items per minute)")
 	viper.BindPFlag("polygon.rate_limit", rootCmd.PersistentFlags().Lookup("polygon-rate-limit"))
+	rootCmd.PersistentFlags().Int("polygon-min-assets", 4000, "minimum number of assets expected from polygon")
+	viper.BindPFlag("polygon.min_assets", rootCmd.PersistentFlags().Lookup("polygon-min-assets"))
+
+	// tiingo
+	rootCmd.PersistentFlags().Int("tiingo-min-assets", 15000, "minimum number of assets expected from tiingo")
+	viper.BindPFlag("tiingo.min_assets", rootCmd.PersistentFlags().Lookup("tiingo-min-assets"))
 
 	// openfigi
 	rootCmd.PersistentFlags().String("openfigi-apikey", "<not-set>", "openfigi API key token")

@@ -12,7 +12,9 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 
+	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4"
+	"github.com/pelletier/go-toml"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
@@ -35,26 +37,30 @@ const (
 	UnknownAsset      AssetType = "Unknown"
 )
 
+type tomlAssetContainer struct {
+	Assets []*Asset
+}
+
 type Asset struct {
 	Ticker               string    `json:"ticker" parquet:"name=ticker, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	Name                 string    `json:"Name" parquet:"name=name, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	Description          string    `json:"description" parquet:"name=description, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
-	PrimaryExchange      string    `json:"primary_exchange" parquet:"name=primary_exchange, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
-	AssetType            AssetType `json:"asset_type" parquet:"name=asset_type, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
-	CompositeFigi        string    `json:"composite_figi" parquet:"name=composite_figi, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
-	ShareClassFigi       string    `json:"share_class_figi" parquet:"name=share_class_figi, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	PrimaryExchange      string    `json:"primary_exchange" toml:"primary_exchange" parquet:"name=primary_exchange, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	AssetType            AssetType `json:"asset_type" toml:"asset_type" parquet:"name=asset_type, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	CompositeFigi        string    `json:"composite_figi" toml:"composite_figi" parquet:"name=composite_figi, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	ShareClassFigi       string    `json:"share_class_figi" toml:"share_class_figi" parquet:"name=share_class_figi, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	CUSIP                string    `json:"cusip" parquet:"name=cusip, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	ISIN                 string    `json:"isin" parquet:"name=isin, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	CIK                  string    `json:"cik" parquet:"name=cik, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
-	ListingDate          string    `json:"listing_date" parquet:"name=listing_date, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
-	DelistingDate        string    `json:"delisting_date" parquet:"name=delisting_date, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	ListingDate          string    `json:"listing_date" toml:"listing_date" parquet:"name=listing_date, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	DelistingDate        string    `json:"delisting_date" toml:"delisting_date" parquet:"name=delisting_date, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	Industry             string    `json:"industry" parquet:"name=industry, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	Sector               string    `json:"sector" parquet:"name=sector, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 	Icon                 []byte    `json:"icon"`
-	IconUrl              string    `json:"icon_url" parquet:"name=icon_url, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
-	CorporateUrl         string    `json:"corporate_url" parquet:"name=corporate_url, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
-	HeadquartersLocation string    `json:"headquarters_location" parquet:"name=headquarters_location, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
-	SimilarTickers       []string  `json:"similar_tickers" parquet:"name=similar_tickers, type=MAP, convertedtype=LIST, valuetype=BYTE_ARRAY, valueconvertedtype=UTF8"`
+	IconUrl              string    `json:"icon_url" toml:"icon_url" parquet:"name=icon_url, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	CorporateUrl         string    `json:"corporate_url" toml:"corporate_url" parquet:"name=corporate_url, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	HeadquartersLocation string    `json:"headquarters_location" toml:"headquarters_location" parquet:"name=headquarters_location, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+	SimilarTickers       []string  `json:"similar_tickers" toml:"similar_tickers" parquet:"name=similar_tickers, type=MAP, convertedtype=LIST, valuetype=BYTE_ARRAY, valueconvertedtype=UTF8"`
 	PolygonDetailAge     int64     `json:"polygon_detail_age" parquet:"name=polygon_detail_age, type=INT64"`
 	FidelityCusip        bool      `parquet:"name=fidelity_cusip, type=BOOLEAN"`
 
@@ -131,65 +137,83 @@ func FilterMixedCase(assets []*Asset) []*Asset {
 	return newAssets
 }
 
-func MergeWithCurrent(assets []*Asset) []*Asset {
-	mergedAssets := make([]*Asset, 0, len(assets))
+// ReadAssetsFromToml reads assets stored as TOML from the file `fn`
+func ReadAssetsFromToml(fn string) []*Asset {
+	var assetContainer tomlAssetContainer
 
-	existingAssets := ReadAssetsFromParquet(viper.GetString("parquet_file"))
-	log.Info().Int("NumAssets", len(existingAssets)).Msg("read parquet")
+	doc, err := os.ReadFile(fn)
+	if err != nil {
+		log.Error().Err(err).Msg("reading TOML asset file failed")
+		return []*Asset{}
+	}
 
-	assetMapTickerExisting := make(map[string]*Asset)
-	assetMapTickerNew := make(map[string]*Asset)
+	err = toml.Unmarshal([]byte(doc), &assetContainer)
+	if err != nil {
+		log.Error().Err(err).Msg("parsing TOML asset file failed")
+		return []*Asset{}
+	}
 
-	// build hash maps
-	for _, asset := range existingAssets {
+	return assetContainer.Assets
+}
+
+func RemoveDelistedAssets(assets []*Asset) []*Asset {
+	existingAssets := make([]*Asset, 0, len(assets))
+	for _, asset := range assets {
 		// remove delisted tickers
 		if asset.DelistingDate == "" {
-			assetMapTickerExisting[asset.Ticker] = asset
+			existingAssets = append(existingAssets, asset)
 		} else {
 			log.Info().Object("Asset", asset).Msg("retired asset")
 		}
 	}
+	return existingAssets
+}
 
-	for _, asset := range assets {
-		if asset.DelistingDate == "" {
-			assetMapTickerNew[asset.Ticker] = asset
+// SubtractAssets returns the set of assets in a but not b
+func SubtractAssets(a []*Asset, b []*Asset) (sub []*Asset) {
+	sub = make([]*Asset, 0, len(a))
+	bAssetMap := BuildAssetMap(b)
+	for _, aAsset := range a {
+		if _, ok := bAssetMap[aAsset.Ticker]; !ok {
+			//			log.Info().Str("a.Ticker", aAsset.Ticker).Msg("asset not in b")
+			sub = append(sub, aAsset)
 		}
 	}
+	return
+}
 
-	// enrich assets with existing database
-	totalNew := 0
-	for ii, asset := range assets {
-		if asset.DelistingDate != "" {
-			continue
-		}
+// MergeAssetList combines assets from `first` and `second`. Assets in `first` are given preference to `second`
+func MergeAssetList(first []*Asset, second []*Asset) (combinedAssets []*Asset, firstOnly []*Asset, secondOnly []*Asset) {
+	combinedAssets = make([]*Asset, 0, len(first)+len(second))
+	firstOnly = make([]*Asset, 0, len(first))
+	secondOnly = make([]*Asset, 0, len(second))
+
+	// build hash maps
+	firstAssetMap := BuildAssetMap(first)
+	secondAssetMap := BuildAssetMap(second)
+
+	// add items of second to first
+	for _, asset := range second {
 		// does the asset already exist?
-		if origAsset, ok := assetMapTickerExisting[asset.Ticker]; ok {
+		if origAsset, ok := firstAssetMap[asset.Ticker]; ok {
 			mergedAsset := MergeAsset(origAsset, asset)
-			assets[ii] = mergedAsset
-			mergedAssets = append(mergedAssets, mergedAsset)
+			combinedAssets = append(combinedAssets, mergedAsset)
 		} else {
 			// add new ticker to db
-			mergedAssets = append(mergedAssets, asset)
-			totalNew++
-			asset.LastUpdated = time.Now().Unix()
+			secondOnly = append(secondOnly, asset)
+			combinedAssets = append(combinedAssets, asset)
 		}
 	}
 
-	log.Info().Int("New", totalNew).Msg("merged assets")
-
-	// mark assets not in the assetMapTickerNew as delisted
-	for _, asset := range existingAssets {
-		if _, ok := assetMapTickerNew[asset.Ticker]; !ok {
-			log.Debug().Str("Ticker", asset.Ticker).Str("CompositeFigi", asset.CompositeFigi).Msg("asset de-listed")
-			if asset.DelistingDate == "" {
-				asset.DelistingDate = time.Now().Format("2006-01-02")
-				asset.LastUpdated = time.Now().Unix()
-			}
-			mergedAssets = append(mergedAssets, asset)
+	// find assets that are only in first
+	for _, asset := range first {
+		if _, ok := secondAssetMap[asset.Ticker]; !ok {
+			firstOnly = append(firstOnly, asset)
+			combinedAssets = append(combinedAssets, asset)
 		}
 	}
 
-	return mergedAssets
+	return
 }
 
 // Merge fields from b into a
@@ -200,15 +224,6 @@ func MergeAsset(a *Asset, b *Asset) *Asset {
 			Str("b.Ticker", b.Ticker).
 			Msg("cannot merge assets with different tickers")
 		return a
-	}
-
-	if a.AssetType != b.AssetType {
-		log.Warn().
-			Str("Ticker", a.Ticker).
-			Str("CompositeFigi", a.CompositeFigi).
-			Str("a.AssetType", string(a.AssetType)).
-			Str("b.AssetType", string(b.AssetType)).
-			Msg("asset types changed for ticker - ignoring change")
 	}
 
 	if a.AssetType == "" && b.AssetType != "" {
@@ -301,12 +316,6 @@ func MergeAsset(a *Asset, b *Asset) *Asset {
 
 	if b.ShareClassFigi != "" && a.ShareClassFigi != b.ShareClassFigi {
 		a.ShareClassFigi = b.ShareClassFigi
-		a.Updated = true
-		a.LastUpdated = time.Now().Unix()
-	}
-
-	if a.Source != b.Source {
-		a.Source = b.Source
 		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
@@ -427,6 +436,49 @@ func SaveIcons(assets []*Asset, dirpath string) {
 
 		os.WriteFile(fmt.Sprintf("%s/%s.%s", dirpath, asset.Ticker, imType), asset.Icon, 0666)
 	}
+}
+
+// ActiveAssetsFromDatabase loads all active assets from the database
+func ActiveAssetsFromDatabase() (assets []*Asset) {
+	ctx := context.Background()
+	assets = make([]*Asset, 0, 50000)
+
+	conn, err := pgx.Connect(ctx, viper.GetString("database.url"))
+	if err != nil {
+		log.Error().Err(err).Msg("could not connect to database")
+		return
+	}
+	defer conn.Close(ctx)
+
+	rows, err := conn.Query(ctx, `SELECT ticker, name, description,
+primary_exchange, asset_type, composite_figi, share_class_figi, cusip,
+isin, cik, listed_utc, industry, sector, logo_url,
+corporate_url, similar_tickers, source FROM assets WHERE active='t'`)
+	if err != nil {
+		log.Error().Err(err).Msg("error querying database")
+	}
+
+	for rows.Next() {
+		asset := Asset{}
+		var listingDate pgtype.Timestamp
+		var assetType string
+		err = rows.Scan(&asset.Ticker, &asset.Name, &asset.Description,
+			&asset.PrimaryExchange, &assetType, &asset.CompositeFigi,
+			&asset.ShareClassFigi, &asset.CUSIP, &asset.ISIN,
+			&asset.CIK, &listingDate,
+			&asset.Industry, &asset.Sector, &asset.IconUrl,
+			&asset.CorporateUrl, &asset.SimilarTickers, &asset.Source)
+		if err != nil {
+			log.Error().Err(err).Msg("error scanning row into asset structure")
+		}
+		asset.AssetType = AssetType(assetType)
+		if listingDate.Status == pgtype.Present {
+			asset.ListingDate = listingDate.Time.Format("2006-01-02")
+		}
+		assets = append(assets, &asset)
+	}
+
+	return
 }
 
 func SaveToDatabase(assets []*Asset) {
@@ -588,4 +640,23 @@ func (asset *Asset) MarshalZerologObject(e *zerolog.Event) {
 	e.Str("Source", asset.Source)
 	e.Int64("PolygonDetailAge", asset.PolygonDetailAge)
 	e.Int64("LastUpdate", asset.LastUpdated)
+}
+
+// LogSummary logs statistics about each signficant asset change
+func LogSummary(assets []*Asset) {
+	nyc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		log.Error().Err(err).Msg("could not load timezone")
+	}
+
+	now := time.Now().In(nyc)
+	changedAge := time.Duration(7 * time.Minute)
+
+	// Changed Assets
+	for _, asset := range assets {
+		lastUpdated := time.Unix(asset.LastUpdated, 0).In(nyc)
+		if now.Sub(lastUpdated) > changedAge {
+			log.Info().Object("Asset", asset).Msg("changed")
+		}
+	}
 }

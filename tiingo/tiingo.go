@@ -31,28 +31,8 @@ func readZipFile(zf *zip.File) ([]byte, error) {
 	return ioutil.ReadAll(f)
 }
 
-// AddTiingoAssets adds tickers downloaded from tiingo that do not currently exist in the list
-func AddTiingoAssets(assets []*common.Asset) []*common.Asset {
-	tiingoAssets := FetchTickers()
-	assetMapTicker := common.BuildAssetMap(assets)
-	for _, asset := range tiingoAssets {
-		// skip everything but mutual funds
-		if asset.AssetType != common.MutualFund {
-			continue
-		}
-		if _, ok := assetMapTicker[asset.Ticker]; !ok {
-			assetMapTicker[asset.Ticker] = asset
-		}
-	}
-	result := make([]*common.Asset, 0, len(assetMapTicker))
-	for _, asset := range assetMapTicker {
-		result = append(result, asset)
-	}
-	return result
-}
-
-// DownloadTickers fetches a list of supported tickers from Tiingo
-func FetchTickers() []*common.Asset {
+// FetchAssets retrieves a list of supported tickers from Tiingo
+func FetchAssets() []*common.Asset {
 	tickerUrl := "https://apimedia.tiingo.com/docs/tiingo/daily/supported_tickers.zip"
 	client := resty.New()
 	assets := []*TiingoAsset{}
@@ -112,6 +92,11 @@ func FetchTickers() []*common.Asset {
 			}
 		}
 		if !keep {
+			continue
+		}
+
+		// If both the start date and end date are not set skip it
+		if asset.StartDate == "" && asset.EndDate == "" {
 			continue
 		}
 
