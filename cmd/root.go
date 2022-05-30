@@ -181,6 +181,7 @@ and save to penny-vault database`,
 
 			if viper.GetBool("database.save") {
 				common.SaveToDatabase(mergedAssets)
+				os.Exit(1)
 			}
 		}
 

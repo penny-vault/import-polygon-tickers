@@ -484,25 +484,28 @@ corporate_url, similar_tickers, source FROM assets WHERE active='t'`)
 	return
 }
 
-func SaveToDatabase(assets []*Asset) {
+func SaveToDatabase(assets []*Asset) error {
 	log.Info().Msg("saving to database")
-	conn, err := pgx.Connect(context.Background(), viper.GetString("database.url"))
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, viper.GetString("database.url"))
 	if err != nil {
 		log.Error().Err(err).Msg("could not connect to database")
-		return
+		return err
 	}
-	defer conn.Close(context.Background())
-	tx, err := conn.Begin(context.Background())
+	defer conn.Close(ctx)
+	tx, err := conn.Begin(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("could not begin transaction")
-		return
+		return err
 	}
 
 	// reset active, new, and updated flags
-	_, err = tx.Exec(context.Background(),
+	_, err = tx.Exec(ctx,
 		`UPDATE assets SET active=False, updated=False, new=False`)
 	if err != nil {
 		log.Error().Err(err).Msg("failed setting assets as inactive")
+		tx.Rollback(ctx)
+		return err
 	}
 
 	// update known assets
@@ -521,7 +524,7 @@ func SaveToDatabase(assets []*Asset) {
 			asset.Source = "api.polygon.io"
 		}
 
-		_, err := tx.Exec(context.Background(),
+		_, err := tx.Exec(ctx,
 			`INSERT INTO assets (
 				"ticker",
 				"asset_type",
@@ -614,12 +617,17 @@ func SaveToDatabase(assets []*Asset) {
 		)
 		if err != nil {
 			log.Error().Err(err).Object("Asset", asset).Msg("error saving asset to database")
-			tx.Rollback(context.Background())
-			return
+			tx.Rollback(ctx)
+			return err
 		}
 	}
 
-	tx.Commit(context.Background())
+	if err = tx.Commit(ctx); err != nil {
+		log.Error().Err(err).Msg("error commiting tx to database")
+		return err
+	}
+
+	return nil
 }
 
 func (asset *Asset) MarshalZerologObject(e *zerolog.Event) {
