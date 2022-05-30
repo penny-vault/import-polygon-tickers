@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - 'Economic Indicator' asset type renamed to 'FRED'
+- Cleaned up logging to try and stay under the 100Kb limit @ healthchecks.io
 
 ### Deprecated
 
