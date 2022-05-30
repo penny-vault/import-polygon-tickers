@@ -1,3 +1,17 @@
+// Copyright 2022
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package common
 
 import (
@@ -64,7 +78,9 @@ type Asset struct {
 	PolygonDetailAge     int64     `json:"polygon_detail_age" parquet:"name=polygon_detail_age, type=INT64"`
 	FidelityCusip        bool      `parquet:"name=fidelity_cusip, type=BOOLEAN"`
 
-	Updated     bool
+	Updated      bool
+	UpdateReason string
+
 	LastUpdated int64  `json:"last_updated" parquet:"name=last_update, type=INT64"`
 	Source      string `json:"source" parquet:"name=source, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
 }
@@ -234,90 +250,105 @@ func MergeAsset(a *Asset, b *Asset) *Asset {
 	}
 
 	if b.CIK != "" && a.CIK != b.CIK {
+		a.UpdateReason = fmt.Sprintf("CIK changed '%s' to '%s'", a.CIK, b.CIK)
 		a.CIK = b.CIK
 		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.CUSIP != "" && a.CUSIP != b.CUSIP {
+		a.UpdateReason = fmt.Sprintf("CUSIP changed '%s' to '%s'", a.CUSIP, b.CUSIP)
 		a.CUSIP = b.CUSIP
 		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.CompositeFigi != "" && a.CompositeFigi != b.CompositeFigi {
+		a.UpdateReason = fmt.Sprintf("CompositeFigi changed '%s' to '%s'", a.CompositeFigi, b.CompositeFigi)
 		a.CompositeFigi = b.CompositeFigi
 		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.CorporateUrl != "" && a.CorporateUrl != b.CorporateUrl {
+		a.UpdateReason = fmt.Sprintf("CorporateUrl changed '%s' to '%s'", a.CorporateUrl, b.CorporateUrl)
 		a.CorporateUrl = b.CorporateUrl
 		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.DelistingDate != "" && a.DelistingDate != b.DelistingDate {
+		a.UpdateReason = fmt.Sprintf("DelistingDate changed '%s' to '%s'", a.DelistingDate, b.DelistingDate)
 		a.DelistingDate = b.DelistingDate
 		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.Description != "" && a.Description != b.Description {
+		a.UpdateReason = fmt.Sprintf("Description changed '%s' to '%s'", a.Description, b.Description)
 		a.Description = b.Description
 		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.HeadquartersLocation != "" && a.HeadquartersLocation != b.HeadquartersLocation {
+		a.UpdateReason = fmt.Sprintf("HeadquartersLocation changed '%s' to '%s'", a.HeadquartersLocation, b.HeadquartersLocation)
 		a.HeadquartersLocation = b.HeadquartersLocation
 		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.ISIN != "" && a.ISIN != b.ISIN {
+		a.UpdateReason = fmt.Sprintf("ISIN changed '%s' to '%s'", a.ISIN, b.ISIN)
 		a.ISIN = b.ISIN
 		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.IconUrl != "" && a.IconUrl != b.IconUrl {
+		a.UpdateReason = fmt.Sprintf("IconUrl changed '%s' to '%s'", a.IconUrl, b.IconUrl)
 		a.IconUrl = b.IconUrl
 		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.Industry != "" && a.Industry != b.Industry {
+		a.UpdateReason = fmt.Sprintf("Industry changed '%s' to '%s'", a.Industry, b.Industry)
 		a.Industry = b.Industry
 		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.ListingDate != "" && a.ListingDate != b.ListingDate {
+		a.UpdateReason = fmt.Sprintf("ListingDate changed '%s' to '%s'", a.ListingDate, b.ListingDate)
 		a.ListingDate = b.ListingDate
 		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.Name != "" && a.Name != b.Name {
+		a.UpdateReason = fmt.Sprintf("Name changed '%s' to '%s'", a.Name, b.Name)
 		a.Name = b.Name
 		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.PrimaryExchange != "" && a.PrimaryExchange != b.PrimaryExchange {
+		a.UpdateReason = fmt.Sprintf("PrimaryExchange changed '%s' to '%s'", a.PrimaryExchange, b.PrimaryExchange)
 		a.PrimaryExchange = b.PrimaryExchange
 		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.Sector != "" && a.Sector != b.Sector {
+		a.UpdateReason = fmt.Sprintf("Sector changed '%s' to '%s'", a.Sector, b.Sector)
 		a.Sector = b.Sector
 		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
 	}
 
 	if b.ShareClassFigi != "" && a.ShareClassFigi != b.ShareClassFigi {
+		a.UpdateReason = fmt.Sprintf("ShareClassFigi changed '%s' to '%s'", a.ShareClassFigi, b.ShareClassFigi)
 		a.ShareClassFigi = b.ShareClassFigi
 		a.Updated = true
 		a.LastUpdated = time.Now().Unix()
@@ -655,18 +686,9 @@ func (asset *Asset) MarshalZerologObject(e *zerolog.Event) {
 
 // LogSummary logs statistics about each signficant asset change
 func LogSummary(assets []*Asset) {
-	nyc, err := time.LoadLocation("America/New_York")
-	if err != nil {
-		log.Error().Err(err).Msg("could not load timezone")
-	}
-
-	now := time.Now().In(nyc)
-	changedAge := time.Duration(7 * time.Minute)
-
 	// Changed Assets
 	for _, asset := range assets {
-		lastUpdated := time.Unix(asset.LastUpdated, 0).In(nyc)
-		if now.Sub(lastUpdated) > changedAge {
+		if asset.Updated {
 			log.Info().Object("Asset", asset).Msg("changed")
 		}
 	}

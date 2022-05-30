@@ -120,7 +120,9 @@ func Enrich(assets []*common.Asset, max int) {
 			}(asset)
 		}
 		if asset.DelistingDate == "" && asset.AssetType == common.MutualFund && asset.Name == "" {
-			bar.Add(1)
+			if !viper.GetBool("display.hide_progress") {
+				bar.Add(1)
+			}
 			yahooRateLimiter.Wait(context.Background())
 			callCount += 1
 			go func(myAsset *common.Asset) {

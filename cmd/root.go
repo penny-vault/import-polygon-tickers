@@ -46,6 +46,7 @@ and save to penny-vault database`,
 		nyc, err := time.LoadLocation("America/New_York")
 		if err != nil {
 			log.Error().Err(err).Msg("could not load timezone")
+			os.Exit(1)
 		}
 
 		log.Info().
@@ -61,12 +62,12 @@ and save to penny-vault database`,
 		polygonAssets, err := polygon.FetchAssets(25)
 		if err != nil {
 			log.Error().Msg("exiting due to error downloading polygon assets")
-			os.Exit(1)
+			os.Exit(common.EXIT_CODE_POLYGON)
 		}
 
 		if len(polygonAssets) < viper.GetInt("polygon.min_assets") {
 			log.Error().Int("NumAssets", len(polygonAssets)).Int("MinRequired", viper.GetInt("polygon.min_assets")).Msg("not enough polygon assets were downloaded - exiting")
-			os.Exit(429)
+			os.Exit(common.EXIT_CODE_ASSET_COUNT_OUT_OF_RANGE)
 		}
 
 		// Fetch MutualFund tickers from tiingo
@@ -74,12 +75,11 @@ and save to penny-vault database`,
 
 		if len(tiingoAssets) < viper.GetInt("tiingo.min_assets") {
 			log.Error().Int("NumAssets", len(tiingoAssets)).Int("MinRequired", viper.GetInt("tiingo.min_assets")).Msg("not enough tiingo assets were downloaded - exiting")
-			os.Exit(429)
+			os.Exit(common.EXIT_CODE_ASSET_COUNT_OUT_OF_RANGE)
 		}
 
 		// Merge polygon and tiingo lists
 		mergedAssets, _, _ := common.MergeAssetList(polygonAssets, tiingoAssets)
-
 		log.Info().Int("Num", len(mergedAssets)).Msg("polygon + tiingo")
 
 		// Add tickers from file
@@ -147,10 +147,10 @@ and save to penny-vault database`,
 		if viper.GetString("database.url") != "" {
 			// Compare against assets currently in DB to find what is getting removed
 			assetsDb := common.ActiveAssetsFromDatabase()
-			log.Info().Int("NumMergedAssets", len(mergedAssets)).Msg("merged assets")
 			removedAssets := common.SubtractAssets(assetsDb, mergedAssets)
 			log.Info().Int("NumAssetsRemoved", len(removedAssets)).Msg("found delisted assets")
 
+			// Check how many assets are marked for removal
 			// this is a safety valve to not delete assets because a
 			// service goes down
 			numRemoved := len(removedAssets)
@@ -161,27 +161,24 @@ and save to penny-vault database`,
 			}
 			if numRemoved > viper.GetInt("max_removed_count") {
 				log.Error().Int("MaxAllowed", viper.GetInt("max_removed_count")).Int("Actual", numRemoved).Msg("too many assets removed - bailing")
-				// log every asset we intend to remove for debugging
-				for _, asset := range mergedAssets {
-					if asset.DelistingDate != "" {
-						log.Debug().Object("Asset", asset).Msg("asset marked for removal")
-					}
-				}
-				os.Exit(429)
+				os.Exit(common.EXIT_CODE_ASSET_COUNT_OUT_OF_RANGE)
 			}
 
 			// mark removed assets so statistics are correctly calculated
 			for _, asset := range removedAssets {
 				asset.DelistingDate = time.Now().In(nyc).Format("2006-01-02")
 				asset.LastUpdated = time.Now().In(nyc).Unix()
+				asset.Updated = true
+				asset.UpdateReason = "asset delisted"
 				mergedAssets = append(mergedAssets, asset)
 			}
 
 			common.LogSummary(mergedAssets)
 
 			if viper.GetBool("database.save") {
-				common.SaveToDatabase(mergedAssets)
-				os.Exit(1)
+				if err = common.SaveToDatabase(mergedAssets); err != nil {
+					os.Exit(common.EXIT_CODE_DATABASE_ERROR)
+				}
 			}
 		}
 
@@ -298,5 +295,6 @@ func initConfig() {
 		log.Debug().Str("ConfigFile", viper.ConfigFileUsed()).Msg("Loaded config file")
 	} else {
 		log.Error().Err(err).Msg("error reading config file")
+		os.Exit(1)
 	}
 }
