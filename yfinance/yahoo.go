@@ -98,14 +98,20 @@ func Enrich(assets []*common.Asset, max int) {
 	if numNeedingUpdate > max && max != 0 {
 		numNeedingUpdate = max
 	}
-	bar := progressbar.Default(int64(numNeedingUpdate))
+
+	var bar *progressbar.ProgressBar
+	if !viper.GetBool("display.hide_progress") {
+		bar = progressbar.Default(int64(numNeedingUpdate))
+	}
 
 	count := make(chan int, len(assets))
 	callCount := 0
 
 	for _, asset := range assets {
 		if asset.DelistingDate == "" && asset.AssetType == common.CommonStock && (asset.Industry == "" || asset.Sector == "" || asset.Description == "") {
-			bar.Add(1)
+			if !viper.GetBool("display.hide_progress") {
+				bar.Add(1)
+			}
 			yahooRateLimiter.Wait(context.Background())
 			callCount += 1
 			go func(myAsset *common.Asset) {

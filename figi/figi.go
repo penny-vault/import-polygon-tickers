@@ -132,10 +132,15 @@ func Enrich(assets []*common.Asset) {
 func LookupFigi(assets []*common.Asset, rateLimiter *rate.Limiter) map[string]*OpenFigiAsset {
 	query := make([]*OpenFigiQuery, 0, 100)
 	result := make(map[string]*OpenFigiAsset)
-	bar := progressbar.Default(int64(len(assets)))
+	var bar *progressbar.ProgressBar
+	if !viper.GetBool("display.hide_progress") {
+		bar = progressbar.Default(int64(len(assets)))
+	}
 
 	for _, asset := range assets {
-		bar.Add(1)
+		if !viper.GetBool("display.hide_progress") {
+			bar.Add(1)
+		}
 		query = append(query, &OpenFigiQuery{
 			IdType:       "TICKER",
 			IdValue:      asset.Ticker,

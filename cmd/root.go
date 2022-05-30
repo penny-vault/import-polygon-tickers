@@ -208,8 +208,10 @@ func init() {
 	cobra.OnInitialize(initLog)
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is import-tickers.toml)")
-	rootCmd.PersistentFlags().Bool("log.json", false, "print logs as json to stderr")
-	viper.BindPFlag("log.json", rootCmd.PersistentFlags().Lookup("log.json"))
+	rootCmd.PersistentFlags().Bool("log-json", false, "print logs as json to stderr")
+	viper.BindPFlag("log.json", rootCmd.PersistentFlags().Lookup("log-json"))
+	rootCmd.PersistentFlags().Bool("hide-progress", false, "hide progress bar")
+	viper.BindPFlag("display.hide_progress", rootCmd.PersistentFlags().Lookup("hide-progress"))
 
 	rootCmd.PersistentFlags().StringP("database-url", "d", "host=localhost port=5432", "DSN for database connection")
 	viper.BindPFlag("database.url", rootCmd.PersistentFlags().Lookup("database-url"))

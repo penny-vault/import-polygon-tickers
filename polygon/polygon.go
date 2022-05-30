@@ -108,11 +108,19 @@ func rateLimit() *rate.Limiter {
 func EnrichDetail(assets []*common.Asset, max int) {
 	maxPolygonDetailAge := viper.GetInt64("polygon.detail_age")
 	polygonRateLimiter := rateLimit()
-	bar := progressbar.Default(int64(len(assets)))
+
+	var bar *progressbar.ProgressBar
+	if !viper.GetBool("display.hide_progress") {
+		bar = progressbar.Default(int64(len(assets)))
+	}
+
 	now := time.Now().Unix()
 	count := 0
 	for _, asset := range assets {
-		bar.Add(1)
+		if !viper.GetBool("display.hide_progress") {
+			bar.Add(1)
+		}
+
 		count++
 		if asset.AssetType != common.MutualFund && asset.AssetType != common.FRED && (asset.PolygonDetailAge+maxPolygonDetailAge) < now {
 			FetchAssetDetail(asset, polygonRateLimiter)
