@@ -19,4 +19,4 @@ import-tickers
 # vendor/
 
 # Configuration files
-import-tickers.toml
+*.toml
