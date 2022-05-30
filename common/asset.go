@@ -551,8 +551,10 @@ func SaveToDatabase(assets []*Asset) error {
 		}
 
 		if asset.Source == "" {
-			log.Warn().Object("Asset", asset).Msg("asset source not set")
 			asset.Source = "api.polygon.io"
+			if asset.AssetType == MutualFund {
+				asset.Source = "api.tiingo.com"
+			}
 		}
 
 		_, err := tx.Exec(ctx,
