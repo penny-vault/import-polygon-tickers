@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"io/ioutil"
+	"regexp"
 	"strings"
 	"time"
 
@@ -29,6 +30,14 @@ func readZipFile(zf *zip.File) ([]byte, error) {
 	}
 	defer f.Close()
 	return ioutil.ReadAll(f)
+}
+
+// ignoreTicker interprets the structure of the ticker to identify
+// the share type (Warrant, Unit, Preferred Share, etc.) and filters
+// out unsupported stock types
+func ignoreTicker(ticker string) bool {
+	matcher := regexp.MustCompile(`[A-Za-z0-9]+-W?P?U?.*`)
+	return matcher.Match([]byte(ticker))
 }
 
 // FetchAssets retrieves a list of supported tickers from Tiingo
@@ -97,6 +106,11 @@ func FetchAssets() []*common.Asset {
 
 		// If both the start date and end date are not set skip it
 		if asset.StartDate == "" && asset.EndDate == "" {
+			continue
+		}
+
+		// filter out tickers we should ignore
+		if ignoreTicker(asset.Ticker) {
 			continue
 		}
 
