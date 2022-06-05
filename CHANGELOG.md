@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Blacklist file to force removal of specific assets
+- De-duplicate assets that belong to a single FIGI but have multiple listings (i.e. both a closed-end and mutual fund)
 
 ### Changed
 - 'Economic Indicator' asset type renamed to 'FRED'
