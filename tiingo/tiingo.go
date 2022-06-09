@@ -36,8 +36,13 @@ func readZipFile(zf *zip.File) ([]byte, error) {
 // the share type (Warrant, Unit, Preferred Share, etc.) and filters
 // out unsupported stock types
 func ignoreTicker(ticker string) bool {
+	ignore := strings.HasPrefix(ticker, "ATEST")
+	ignore = ignore || strings.HasPrefix(ticker, "NTEST")
+	ignore = ignore || strings.HasPrefix(ticker, "PTEST")
+	ignore = ignore || strings.Contains(ticker, " ")
 	matcher := regexp.MustCompile(`[A-Za-z0-9]+-W?P?U?.*`)
-	return matcher.Match([]byte(ticker))
+	ignore = ignore || matcher.Match([]byte(ticker))
+	return ignore
 }
 
 // FetchAssets retrieves a list of supported tickers from Tiingo

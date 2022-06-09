@@ -90,6 +90,13 @@ and save to penny-vault database`,
 			mergedAssets, _, _ = common.MergeAssetList(mergedAssets, tomlAssets)
 		}
 
+		// blacklisted assets
+		blacklistFn := viper.GetString("blacklist_fn")
+		if blacklistFn != "" {
+			blacklisted := common.ReadAssetsFromToml(blacklistFn)
+			mergedAssets = common.RemoveAssets(mergedAssets, blacklisted)
+		}
+
 		// Load from parquet
 		parquetDb := viper.GetString("parquet_file")
 		if parquetDb != "" {
@@ -225,6 +232,10 @@ func init() {
 	// static assets
 	rootCmd.PersistentFlags().String("static-assets-fn", "", "load additional assets from the specified TOML file")
 	viper.BindPFlag("static_assets_fn", rootCmd.PersistentFlags().Lookup("static-assets-fn"))
+
+	// blacklisted assets
+	rootCmd.PersistentFlags().String("blacklist-fn", "", "load additional assets from the specified TOML file")
+	viper.BindPFlag("blackist_fn", rootCmd.PersistentFlags().Lookup("blacklist-fn"))
 
 	// backblaze
 	rootCmd.PersistentFlags().String("backblaze-application-id", "<not-set>", "backblaze application id")
