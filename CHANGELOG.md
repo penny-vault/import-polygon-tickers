@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] - 2022-06-22
 ### Added
 - Blacklist file to force removal of specific assets
 - De-duplicate assets that belong to a single FIGI but have multiple listings (i.e. both a closed-end and mutual fund)
@@ -14,14 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cleaned up logging to try and stay under the 100Kb limit @ healthchecks.io
 - Ignore tickers from Tiingo that look like preferred shares, warrants or units
 - Ignore tickers in DB marked as synthetic assets
-
-### Deprecated
-
-### Removed
-
-### Fixed
-
-### Security
 
 ## [0.3.0] - 2022-05-28
 ### Added
@@ -46,7 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Encrich assets with Composite FIGI from Openfigi mapping API
 - Save changed assets to database and backblaze
 
-[Unreleased]: https://github.com/penny-vault/import-tickers/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/penny-vault/import-tickers/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/penny-vault/import-tickers/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/penny-vault/import-tickers/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/penny-vault/import-tickers/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/penny-vault/import-tickers/releases/tag/v0.0.1
