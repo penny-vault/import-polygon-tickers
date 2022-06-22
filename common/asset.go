@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -130,6 +131,81 @@ func CleanAssets(assets []*Asset) []*Asset {
 		}
 	}
 	return clean
+}
+
+// DeduplicateCompositeFigi de-dupes assets that belong to the same composite
+// figi. Dedup rules are as follows:
+//   1. Common stock is preferred to all other types
+//   2. Closed-end funds are preferred to mutual funds
+//   3. Most recent listed_utc is preferred
+func DeduplicateCompositeFigi(assets []*Asset) []*Asset {
+	dedupAssets := make([]*Asset, 0, len(assets))
+
+	// build an asset map based on composite figi
+	compositeMap := make(map[string][]*Asset)
+	for _, asset := range assets {
+		if assetList, ok := compositeMap[asset.CompositeFigi]; !ok {
+			assetList = make([]*Asset, 1)
+			assetList[0] = asset
+			compositeMap[asset.CompositeFigi] = assetList
+		} else {
+			assetList = append(assetList, asset)
+			compositeMap[asset.CompositeFigi] = assetList
+		}
+	}
+
+	// remove non-duplicated assets
+	for k, v := range compositeMap {
+		if len(v) == 1 {
+			delete(compositeMap, k)
+			dedupAssets = append(dedupAssets, v[0])
+		}
+	}
+
+	// for duplicated assets choose a single asset to represent the family
+	for k, v := range compositeMap {
+		sort.SliceStable(v, func(i, j int) bool {
+			a, b := v[i], v[j]
+			if a.AssetType == CommonStock && b.AssetType != CommonStock {
+				// highest priority is common stock
+				return true
+			} else if b.AssetType == CommonStock && a.AssetType != CommonStock {
+				return false
+			} else if a.AssetType == CEF && b.AssetType != CEF {
+				// next is closed end fund
+				return true
+			} else if b.AssetType == CEF && a.AssetType != CEF {
+				return false
+			} else {
+				if a.ListingDate != "" && b.ListingDate != "" {
+					aListed, err := time.Parse("2006-01-02", a.ListingDate)
+					if err != nil {
+						return false
+					}
+
+					bListed, err := time.Parse("2006-01-02", b.ListingDate)
+					if err != nil {
+						return false
+					}
+
+					if aListed.After(bListed) {
+						return true
+					}
+				}
+			}
+			return false
+		})
+
+		summary := make([]string, 0, len(v)-1)
+		for _, asset := range v[1:] {
+			summary = append(summary, fmt.Sprintf("%s{%s %s}", asset.Ticker, asset.AssetType, asset.ListingDate))
+		}
+
+		log.Info().Str("CompositeFigi", k).Str("Selected", fmt.Sprintf("%s{%s %s}", v[0].Ticker, v[0].AssetType, v[0].ListingDate)).Strs("Other", summary).Msg("deduping assets")
+		dedupAssets = append(dedupAssets, v[0])
+	}
+
+	return dedupAssets
 }
 
 // TrimeWhiteSpace removes leading and trailing whitespace in selected fields of the asset
@@ -505,7 +581,7 @@ func ActiveAssetsFromDatabase() (assets []*Asset) {
 	rows, err := conn.Query(ctx, `SELECT ticker, name, description,
 primary_exchange, asset_type, composite_figi, share_class_figi, cusip,
 isin, cik, listed_utc, industry, sector, logo_url,
-corporate_url, similar_tickers, source FROM assets WHERE active='t'`)
+corporate_url, similar_tickers, source FROM assets WHERE active='t' AND asset_type != 'Synthetic History'`)
 	if err != nil {
 		log.Error().Err(err).Msg("error querying database")
 	}

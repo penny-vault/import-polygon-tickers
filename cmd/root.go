@@ -53,6 +53,7 @@ and save to penny-vault database`,
 			Bool("SaveDB", viper.GetBool("database.save")).
 			Bool("Backbalze.SkipUpload", viper.GetBool("backblaze.skip_upload")).
 			Str("TickerDB", viper.GetString("parquet_file")).
+			Str("Blacklist", viper.GetString("blacklist_fn")).
 			Msg("loading tickers")
 
 		backblaze.Download(viper.GetString("parquet_file"), viper.GetString("backblaze.bucket"))
@@ -90,13 +91,6 @@ and save to penny-vault database`,
 			mergedAssets, _, _ = common.MergeAssetList(mergedAssets, tomlAssets)
 		}
 
-		// blacklisted assets
-		blacklistFn := viper.GetString("blacklist_fn")
-		if blacklistFn != "" {
-			blacklisted := common.ReadAssetsFromToml(blacklistFn)
-			mergedAssets = common.RemoveAssets(mergedAssets, blacklisted)
-		}
-
 		// Load from parquet
 		parquetDb := viper.GetString("parquet_file")
 		if parquetDb != "" {
@@ -126,6 +120,13 @@ and save to penny-vault database`,
 			}
 		}
 
+		// blacklisted assets
+		blacklistFn := viper.GetString("blacklist_fn")
+		if blacklistFn != "" {
+			blacklisted := common.ReadAssetsFromToml(blacklistFn)
+			mergedAssets = common.RemoveAssets(mergedAssets, blacklisted)
+		}
+
 		// Enrich with call to Polygon Asset Details
 		log.Info().Msg("fetching asset details from polygon")
 		polygon.EnrichDetail(mergedAssets, 5)
@@ -150,6 +151,10 @@ and save to penny-vault database`,
 		mergedAssets = common.FilterMixedCase(mergedAssets)
 		afterFilterCnt := len(mergedAssets)
 		log.Debug().Int("RemovedAssetsCount", beforeFilterCnt-afterFilterCnt).Msg("filtered assets with mixed-case tickers")
+
+		// deduplicate figi's that have multiple active assets
+		// associated with them
+		mergedAssets = common.DeduplicateCompositeFigi(mergedAssets)
 
 		if viper.GetString("database.url") != "" {
 			// Compare against assets currently in DB to find what is getting removed
@@ -226,7 +231,7 @@ func init() {
 	rootCmd.PersistentFlags().String("parquet-file", "tickers.parquet", "save results to parquet")
 	viper.BindPFlag("parquet_file", rootCmd.PersistentFlags().Lookup("parquet-file"))
 
-	rootCmd.PersistentFlags().Int("max-removed-count", 25, "maximum number of assets that can be removed per run; this is a safety feature in-case something goes wrong to prevent the database from getting hosed up")
+	rootCmd.PersistentFlags().Int("max-removed-count", 50, "maximum number of assets that can be removed per run; this is a safety feature in-case something goes wrong to prevent the database from getting hosed up")
 	viper.BindPFlag("max_removed_count", rootCmd.PersistentFlags().Lookup("max-removed-count"))
 
 	// static assets
@@ -235,7 +240,7 @@ func init() {
 
 	// blacklisted assets
 	rootCmd.PersistentFlags().String("blacklist-fn", "", "load additional assets from the specified TOML file")
-	viper.BindPFlag("blackist_fn", rootCmd.PersistentFlags().Lookup("blacklist-fn"))
+	viper.BindPFlag("blacklist_fn", rootCmd.PersistentFlags().Lookup("blacklist-fn"))
 
 	// backblaze
 	rootCmd.PersistentFlags().String("backblaze-application-id", "<not-set>", "backblaze application id")
