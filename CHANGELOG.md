@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 'Economic Indicator' asset type renamed to 'FRED'
 - Cleaned up logging to try and stay under the 100Kb limit @ healthchecks.io
 - Ignore tickers from Tiingo that look like preferred shares, warrants or units
+- Ignore tickers in DB marked as synthetic assets
 
 ### Deprecated
 

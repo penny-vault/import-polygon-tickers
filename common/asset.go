@@ -581,7 +581,7 @@ func ActiveAssetsFromDatabase() (assets []*Asset) {
 	rows, err := conn.Query(ctx, `SELECT ticker, name, description,
 primary_exchange, asset_type, composite_figi, share_class_figi, cusip,
 isin, cik, listed_utc, industry, sector, logo_url,
-corporate_url, similar_tickers, source FROM assets WHERE active='t'`)
+corporate_url, similar_tickers, source FROM assets WHERE active='t' AND asset_type != 'Synthetic History'`)
 	if err != nil {
 		log.Error().Err(err).Msg("error querying database")
 	}
