@@ -152,6 +152,10 @@ and save to penny-vault database`,
 		afterFilterCnt := len(mergedAssets)
 		log.Debug().Int("RemovedAssetsCount", beforeFilterCnt-afterFilterCnt).Msg("filtered assets with mixed-case tickers")
 
+		// Filter 5-digit assets that have no name and end in a U or W
+		// these are likely warrants or units
+		mergedAssets = common.FilterLikelyWarrantsAndUnits(mergedAssets)
+
 		// deduplicate figi's that have multiple active assets
 		// associated with them
 		mergedAssets = common.DeduplicateCompositeFigi(mergedAssets)
@@ -263,7 +267,7 @@ func init() {
 	viper.BindPFlag("polygon.min_assets", rootCmd.PersistentFlags().Lookup("polygon-min-assets"))
 
 	// tiingo
-	rootCmd.PersistentFlags().Int("tiingo-min-assets", 15000, "minimum number of assets expected from tiingo")
+	rootCmd.PersistentFlags().Int("tiingo-min-assets", 5000, "minimum number of assets expected from tiingo")
 	viper.BindPFlag("tiingo.min_assets", rootCmd.PersistentFlags().Lookup("tiingo-min-assets"))
 
 	// openfigi

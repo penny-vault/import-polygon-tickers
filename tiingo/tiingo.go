@@ -42,6 +42,8 @@ func ignoreTicker(ticker string) bool {
 	ignore = ignore || strings.Contains(ticker, " ")
 	matcher := regexp.MustCompile(`[A-Za-z0-9]+-W?P?U?.*`)
 	ignore = ignore || matcher.Match([]byte(ticker))
+	matcher = regexp.MustCompile(`[A-Za-z0-9]{5}W?P?U?.*`)
+	ignore = ignore || matcher.Match([]byte(ticker))
 	return ignore
 }
 
