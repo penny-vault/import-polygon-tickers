@@ -468,7 +468,6 @@ func MergeAsset(a *Asset, b *Asset) *Asset {
 }
 
 func ReadAssetsFromParquet(fn string) []*Asset {
-	log.Info().Str("FileName", fn).Msg("loading parquet file")
 	fr, err := local.NewLocalFileReader(fn)
 	if err != nil {
 		log.Error().Err(err).Msg("can't open file")
@@ -518,6 +517,7 @@ func ReadAssetsFromParquet(fn string) []*Asset {
 		}
 	}
 
+	log.Info().Str("FileName", fn).Int("NumAssets", len(assets)).Msg("loaded parquet file")
 	return assets
 }
 
