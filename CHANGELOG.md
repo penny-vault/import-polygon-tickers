@@ -6,6 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- sub-task to delete a ticker from the parquet db
 
 ### Changed
 - default tiingo assets is now 9000
