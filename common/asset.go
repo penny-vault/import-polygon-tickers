@@ -221,6 +221,22 @@ func TrimWhiteSpace(assets []*Asset) {
 	}
 }
 
+// FilterLikelyWarrantsAndUnits removes assets with > 4-digit tickers
+// that have no name and end in a U or W these are likely warrants
+// or units
+func FilterLikelyWarrantsAndUnits(assets []*Asset) []*Asset {
+	newAssets := make([]*Asset, 0, len(assets))
+	for _, asset := range assets {
+		lastDigit := asset.Ticker[len(asset.Ticker)-1]
+		if len(asset.Ticker) > 4 && asset.Name == "" && (lastDigit == 'U' || lastDigit == 'W') {
+			// skip this asset
+			continue
+		}
+		newAssets = append(newAssets, asset)
+	}
+	return newAssets
+}
+
 // FilterMixedCase removes assets that have mixed-case tickers
 func FilterMixedCase(assets []*Asset) []*Asset {
 	newAssets := make([]*Asset, 0, len(assets))
