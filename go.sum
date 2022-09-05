@@ -344,8 +344,8 @@ github.com/rs/zerolog v1.28.0/go.mod h1:NILgTygv/Uej1ra5XxGf82ZFSLk58MFGAUS2o6us
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/ruudk/golang-pdf417 v0.0.0-20181029194003-1af4ab5afa58/go.mod h1:6lfFZQK844Gfx8o5WFuvpxWRwnSoipWe/p622j1v06w=
 github.com/satori/go.uuid v1.2.0/go.mod h1:dA0hQrYB0VpLJoorglMZABFdXlWrHn1NEOzdhQKdks0=
-github.com/schollz/progressbar/v3 v3.10.0 h1:pOab0roS2jf6zkEBKAe9EyEdmRKJvhbbuxqVp9/Qjyw=
-github.com/schollz/progressbar/v3 v3.10.0/go.mod h1:0N6zRwbDVLFCFy5chxuukVlRkoHWYFFLzlxQrw/sf3M=
+github.com/schollz/progressbar/v3 v3.10.1 h1:6A8v8TIcCJL4yemlUJS9gdcpZ++Gy6toOh1JzKQkz+U=
+github.com/schollz/progressbar/v3 v3.10.1/go.mod h1:R2djRgv58sn00AGysc4fN0ip4piOGd3z88K+zVBjczs=
 github.com/shopspring/decimal v0.0.0-20180709203117-cd690d0c9e24/go.mod h1:M+9NzErvs504Cn4c5DxATwIqPbtswREoFCre64PpcG4=
 github.com/shopspring/decimal v1.2.0 h1:abSATXmQEYyShuxI4/vyW3tV1MrKAJzCZ/0zLUXYbsQ=
 github.com/shopspring/decimal v1.2.0/go.mod h1:DKyhrW/HYNuLGql+MJL6WCR6knT2jwCFRcu2hWCYk4o=
