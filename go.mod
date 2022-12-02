@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/go-resty/resty/v2 v2.7.0
 	github.com/gocarina/gocsv v0.0.0-20220531201732-5f969b02b902
-	github.com/jackc/pgtype v1.12.0
+	github.com/jackc/pgtype v1.13.0
 	github.com/jackc/pgx/v4 v4.17.2
 	github.com/kothar/go-backblaze v0.0.0-20210124194846-35409b867216
 	github.com/magefile/mage v1.14.0
