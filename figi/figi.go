@@ -34,9 +34,10 @@ type OpenFigiAsset struct {
 }
 
 type OpenFigiQuery struct {
-	IdType       string `json:"idType"`
-	IdValue      string `json:"idValue"`
-	ExchangeCode string `json:"exchCode"`
+	IdType                  string `json:"idType"`
+	IdValue                 string `json:"idValue"`
+	ExchangeCode            string `json:"exchCode"`
+	MarketSectorDescription string `json:"marketSecDes"`
 }
 
 func rateLimit() *rate.Limiter {
@@ -142,9 +143,10 @@ func LookupFigi(assets []*common.Asset, rateLimiter *rate.Limiter) map[string]*O
 			bar.Add(1)
 		}
 		query = append(query, &OpenFigiQuery{
-			IdType:       "TICKER",
-			IdValue:      asset.Ticker,
-			ExchangeCode: "US",
+			IdType:                  "TICKER",
+			IdValue:                 asset.Ticker,
+			ExchangeCode:            "US",
+			MarketSectorDescription: "Equity",
 		})
 
 		if len(query) == 100 {
