@@ -135,9 +135,9 @@ func CleanAssets(assets []*Asset) []*Asset {
 
 // DeduplicateCompositeFigi de-dupes assets that belong to the same composite
 // figi. Dedup rules are as follows:
-//   1. Common stock is preferred to all other types
-//   2. Closed-end funds are preferred to mutual funds
-//   3. Most recent listed_utc is preferred
+//  1. Common stock is preferred to all other types
+//  2. Closed-end funds are preferred to mutual funds
+//  3. Most recent listed_utc is preferred
 func DeduplicateCompositeFigi(assets []*Asset) []*Asset {
 	dedupAssets := make([]*Asset, 0, len(assets))
 
