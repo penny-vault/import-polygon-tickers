@@ -3,7 +3,7 @@ module github.com/penny-vault/import-tickers
 go 1.18
 
 require (
-	github.com/go-resty/resty/v2 v2.9.1
+	github.com/go-resty/resty/v2 v2.10.0
 	github.com/gocarina/gocsv v0.0.0-20230616125104-99d496ca653d
 	github.com/jackc/pgtype v1.14.0
 	github.com/jackc/pgx/v4 v4.18.1
