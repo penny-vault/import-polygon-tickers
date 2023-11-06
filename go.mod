@@ -16,7 +16,7 @@ require (
 	github.com/spf13/viper v1.17.0
 	github.com/xitongsys/parquet-go v1.6.2
 	github.com/xitongsys/parquet-go-source v0.0.0-20230919034749-0b16411e6349
-	golang.org/x/time v0.3.0
+	golang.org/x/time v0.4.0
 )
 
 require (
