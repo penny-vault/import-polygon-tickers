@@ -78,6 +78,10 @@ func Enrich(assets []*common.Asset) {
 
 	emptyFigis := make([]*common.Asset, 0, 100)
 	for _, asset := range assets {
+		if asset.CompositeFigi == "UNKNOWN" {
+			asset.CompositeFigi = ""
+		}
+
 		if (asset.CompositeFigi == "" || asset.AssetType == common.UnknownAsset) && asset.DelistingDate == "" {
 			emptyFigis = append(emptyFigis, asset)
 		}
